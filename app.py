@@ -220,10 +220,11 @@ def exportar_recibo_pdf(reg):
     return buffer.getvalue()
 
 
+# Lista base de frutas sugeridas con opción dinámica
 LISTA_FRUTAS = [
     "CHULUPA", "FRESA", "GUANABANA", "GUAYABA", "LIMON", 
     "LULO", "MANGO", "MARACUYA", "MORA", "NARANJA", 
-    "PIÑA", "TOMATE ARBOL", "UVA"
+    "PIÑA", "TOMATE ARBOL", "UVA", "OTRA (Escribir nueva...)"
 ]
 
 tab1, tab2, tab3 = st.tabs(["📋 Planeación Semanal (Compras)", "🚛 Recepción de Fruta (Bodega)", "📊 Control y Conciliación (Contabilidad)"])
@@ -235,7 +236,13 @@ with tab1:
         col1, col2, col3 = st.columns(3)
         with col1:
             id_semana = st.text_input("ID de la Semana (Ej: SEM-2026-29)", placeholder="SEM-YYYY-WW")
-            fruta = st.selectbox("Fruta a Programar", LISTA_FRUTAS)
+            fruta_seleccionada = st.selectbox("Fruta a Programar", LISTA_FRUTAS)
+            
+            # Campo de entrada de texto dinámico si seleccionan "OTRA"
+            fruta_manual = ""
+            if fruta_seleccionada == "OTRA (Escribir nueva...)":
+                fruta_manual = st.text_input("Escribe el nombre de la nueva fruta:", placeholder="Ej: GUANABANA").strip().upper()
+                
         with col2:
             fecha_inicio = st.date_input("Fecha de la Orden (Inicio)")
             proveedor = st.text_input("Nombre del Proveedor")
@@ -246,18 +253,21 @@ with tab1:
             
         submitted = st.form_submit_button("Guardar Orden de Compra")
         if submitted:
-            if id_semana and proveedor and cantidad_pactada > 0 and precio_pactado > 0:
+            # Determinamos cuál será el nombre final de la fruta
+            fruta_final = fruta_manual if fruta_seleccionada == "OTRA (Escribir nueva...)" else fruta_seleccionada
+            
+            if id_semana and proveedor and cantidad_pactada > 0 and precio_pactado > 0 and fruta_final != "":
                 conn = sqlite3.connect("compras_oranges.db")
                 c = conn.cursor()
                 c.execute("""
                     INSERT INTO programacion_semanal (id_semana, fecha_inicio, fecha_fin, fruta, proveedor, cantidad_pactada, precio_pactado)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (id_semana, fecha_inicio, fecha_fin, fruta, proveedor, cantidad_pactada, precio_pactado))
+                """, (id_semana, fecha_inicio, fecha_fin, fruta_final, proveedor, cantidad_pactada, precio_pactado))
                 conn.commit()
                 conn.close()
-                st.success(f"✅ Orden de Compra para {fruta} registrada exitosamente.")
+                st.success(f"✅ Orden de Compra para {fruta_final} registrada exitosamente.")
             else:
-                st.error("⚠️ Por favor completa todos los campos con valores válidos.")
+                st.error("⚠️ Por favor completa todos los campos con valores válidos (asegúrate de que la nueva fruta tenga un nombre).")
 
     st.subheader("Historial de Ordenes de Compra")
     conn = sqlite3.connect("compras_oranges.db")
@@ -377,7 +387,7 @@ with tab2:
                 else:
                     st.error("⚠️ La cantidad ingresada y el precio deben ser mayores a cero.")
 
-        # SECCIÓN DE EXPORTACIÓN CON NUEVA OPCIÓN DE PDF PROFESIONAL
+        # SECCIÓN DE EXPORTACIÓN CON EXPORTACIÓN DE PDF PROFESIONAL
         if st.session_state.ultimo_registro:
             st.markdown("---")
             st.subheader("📩 Soportes de Entrega para el Proveedor")
