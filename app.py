@@ -237,12 +237,6 @@ with tab1:
         with col1:
             id_semana = st.text_input("ID de la Semana (Ej: SEM-2026-29)", placeholder="SEM-YYYY-WW")
             fruta_seleccionada = st.selectbox("Fruta a Programar", LISTA_FRUTAS)
-            
-            # Campo de entrada de texto dinámico si seleccionan "OTRA"
-            fruta_manual = ""
-            if fruta_seleccionada == "OTRA (Escribir nueva...)":
-                fruta_manual = st.text_input("Escribe el nombre de la nueva fruta:", placeholder="Ej: GUANABANA").strip().upper()
-                
         with col2:
             fecha_inicio = st.date_input("Fecha de la Orden (Inicio)")
             proveedor = st.text_input("Nombre del Proveedor")
@@ -250,6 +244,11 @@ with tab1:
             fecha_fin = st.date_input("Fecha Fin de la Orden")
             cantidad_pactada = st.number_input("CANT (Kg)", min_value=0.0, step=10.0)
             precio_pactado = st.number_input("PRECIO Pactado por Kg ($)", min_value=0.0, step=50.0)
+            
+        # El cuadro para escribir la nueva fruta aparece aquí, bien visible a lo ancho de forma reactiva
+        fruta_manual = ""
+        if fruta_seleccionada == "OTRA (Escribir nueva...)":
+            fruta_manual = st.text_input("📝 Escribe el nombre de la nueva fruta aquí:", placeholder="Ej: CEREZADA").strip().upper()
             
         submitted = st.form_submit_button("Guardar Orden de Compra")
         if submitted:
@@ -307,7 +306,7 @@ with tab2:
         with col_c2:
             pesos_texto = st.text_area("Pesos Brutos de Canastillas", placeholder="Ejemplo: 23, 110*5, 45*2, 22.8")
 
-        cantidad_final_calculada = 0.0
+        amount_final_calculated = 0.0
         conteo_canastillas = 0
         tara_total = 0.0
         bruto_total = 0.0
@@ -329,9 +328,9 @@ with tab2:
                         conteo_canastillas += 1
                 
                 tara_total = conteo_canastillas * peso_tara
-                cantidad_final_calculada = max(0.0, bruto_total - tara_total)
+                amount_final_calculated = max(0.0, bruto_total - tara_total)
                 
-                st.info(f"📋 **Resumen de Báscula:** {conteo_canastillas} canastillas en total | Total Bruto: {bruto_total:.2f} Kg | Tara Total Restada ({conteo_canastillas} x {peso_tara}kg): {tara_total:.2f} Kg | **Peso Neto Real: {cantidad_final_calculada:.2f} Kg**")
+                st.info(f"📋 **Resumen de Báscula:** {conteo_canastillas} canastillas en total | Total Bruto: {bruto_total:.2f} Kg | Tara Total Restada ({conteo_canastillas} x {peso_tara}kg): {tara_total:.2f} Kg | **Peso Neto Real: {amount_final_calculated:.2f} Kg**")
             except Exception as e:
                 st.error("⚠️ Error en el formato de pesos. Recuerda usar el formato correcto (ej: 23, 110*5, 45*2).")
 
@@ -346,7 +345,7 @@ with tab2:
             with col1:
                 fecha_ingreso = st.date_input("FECHA de Ingreso")
                 factura_ds = st.text_input("FACT. - DS (Número de Factura / Documento Soporte)")
-                ingreso_bodega = st.number_input("INGR A BODEGA (Kg Netos)", min_value=0.0, value=float(cantidad_final_calculada), step=0.1)
+                ingreso_bodega = st.number_input("INGR A BODEGA (Kg Netos)", min_value=0.0, value=float(amount_final_calculated), step=0.1)
                 precio_final = st.number_input("PREC. FINAL por Kg ($)", min_value=0.0, value=float(fila_seleccionada['precio_pactado']), step=50.0)
             with col2:
                 conductor = st.text_input("Nombre Conductor - Encargado")
