@@ -232,23 +232,31 @@ tab1, tab2, tab3 = st.tabs(["📋 Planeación Semanal (Compras)", "🚛 Recepci�
 # ----------------- PESTAÑA 1: PLANEACIÓN SEMANAL -----------------
 with tab1:
     st.header("📄 Formato Orden de Compra (Luis Alberto Garcia)")
+    
+    # Creamos un contenedor contenedor que se actualiza dinámicamente fuera del formulario
+    id_semana = st.text_input("ID de la Semana (Ej: SEM-2026-29)", placeholder="SEM-YYYY-WW")
+    
+    col_fruta, col_prov = st.columns(2)
+    with col_fruta:
+        fruta_seleccionada = st.selectbox("Fruta a Programar", LISTA_FRUTAS)
+    with col_prov:
+        proveedor = st.text_input("Nombre del Proveedor")
+
+    # Muestra de forma inmediata y reactiva el campo de escritura si se elige "OTRA"
+    fruta_manual = ""
+    if fruta_seleccionada == "OTRA (Escribir nueva...)":
+        fruta_manual = st.text_input("📝 Escribe el nombre de la nueva fruta aquí:", placeholder="Ej: CEREZADA").strip().upper()
+
+    # Formulario interno para los datos numéricos y de fecha (esto evita que el formulario bloquee la reactividad)
     with st.form("form_planeacion", clear_on_submit=True):
         col1, col2, col3 = st.columns(3)
         with col1:
-            id_semana = st.text_input("ID de la Semana (Ej: SEM-2026-29)", placeholder="SEM-YYYY-WW")
-            fruta_seleccionada = st.selectbox("Fruta a Programar", LISTA_FRUTAS)
-        with col2:
             fecha_inicio = st.date_input("Fecha de la Orden (Inicio)")
-            proveedor = st.text_input("Nombre del Proveedor")
-        with col3:
+        with col2:
             fecha_fin = st.date_input("Fecha Fin de la Orden")
+        with col3:
             cantidad_pactada = st.number_input("CANT (Kg)", min_value=0.0, step=10.0)
             precio_pactado = st.number_input("PRECIO Pactado por Kg ($)", min_value=0.0, step=50.0)
-            
-        # El cuadro para escribir la nueva fruta aparece aquí, bien visible a lo ancho de forma reactiva
-        fruta_manual = ""
-        if fruta_seleccionada == "OTRA (Escribir nueva...)":
-            fruta_manual = st.text_input("📝 Escribe el nombre de la nueva fruta aquí:", placeholder="Ej: CEREZADA").strip().upper()
             
         submitted = st.form_submit_button("Guardar Orden de Compra")
         if submitted:
@@ -265,8 +273,9 @@ with tab1:
                 conn.commit()
                 conn.close()
                 st.success(f"✅ Orden de Compra para {fruta_final} registrada exitosamente.")
+                st.rerun() # Fuerza la actualización automática del historial de abajo
             else:
-                st.error("⚠️ Por favor completa todos los campos con valores válidos (asegúrate de que la nueva fruta tenga un nombre).")
+                st.error("⚠️ Por favor completa todos los campos con valores válidos (asegúrate de ingresar proveedor y el nombre de la fruta).")
 
     st.subheader("Historial de Ordenes de Compra")
     conn = sqlite3.connect("compras_oranges.db")
