@@ -3,10 +3,11 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 import io
+import os
 
 # Importaciones para la generación profesional de PDF
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -32,7 +33,6 @@ def init_db():
     """)
 
     # 2. Tabla Detalle de Frutas y Calidades por Orden de Compra
-    # (Migración automática si existe la tabla antigua)
     c.execute("PRAGMA table_info(detalle_orden_compra)")
     cols = [column[1] for column in c.fetchall()]
     if cols and "modo_precio" not in cols:
@@ -159,6 +159,51 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     t_desglose = Table(datos_tabla, colWidths=[170, 110, 120, 130])
     t_desglose.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F5F5F5')), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')), ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#FFE0B2'))]))
     story.append(t_desglose)
+    story.append(Spacer(1, 25))
+    
+    # ----------------- BLOQUE DE FIRMA LUIS ALBERTO GARCIA -----------------
+    story.append(Paragraph("AUTORIZACIÓN Y FIRMA", seccion_estilo))
+    
+    # Si subes un archivo "firma_luis.png" al repositorio, se cargará automáticamente la imagen.
+    ruta_firma_imagen = "firma_luis.png"
+    if os.path.exists(ruta_firma_imagen):
+        img_firma = Image(ruta_firma_imagen, width=140, height=50)
+        col_firma = [img_firma, Paragraph("__________________________________", normal_bold)]
+    else:
+        col_firma = [Paragraph("<b><i>[ FIRMADO DIGITALMENTE ]</i></b>", ParagraphStyle('FirmaDig', parent=styles['Normal'], fontName='Helvetica-BoldOblique', fontSize=10, textColor=colors.HexColor('#1B5E20'))),
+                     Paragraph("__________________________________", normal_bold)]
+
+    texto_firmante = Paragraph(
+        "<b>LUIS ALBERTO GARCÍA</b><br/>"
+        "<b>Cargo:</b> Dirección de Compras / Operaciones<br/>"
+        "<b>Empresa:</b> The Oranges S.A.S.<br/>"
+        f"<b>Fecha de Autorización:</b> {datetime.now().strftime('%d/%m/%Y %I:%M %p')}",
+        normal_text
+    )
+    
+    texto_proveedor = Paragraph(
+        "<br/><br/>__________________________________<br/>"
+        "<b>ACEPTADO POR PROVEEDOR</b><br/>"
+        f"<b>Nombre:</b> {encabezado['proveedor']}<br/>"
+        "<b>Firma / Sello Recibido</b>",
+        normal_text
+    )
+
+    tabla_firmas_datos = [
+        [col_firma[0], Paragraph("", normal_text)],
+        [col_firma[1], Paragraph("", normal_text)],
+        [texto_firmante, texto_proveedor]
+    ]
+    
+    t_firmas = Table(tabla_firmas_datos, colWidths=[260, 270])
+    t_firmas.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2)
+    ]))
+    
+    story.append(t_firmas)
+    
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
