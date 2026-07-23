@@ -165,7 +165,7 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     story.append(t_desglose)
     story.append(Spacer(1, 25))
     
-    # ----------------- BLOQUE DE FIRMA LUIS ALBERTO GARCIA -----------------
+    # ----------------- BLOQUE DE FIRMA ÚNICA LUIS ALBERTO GARCIA -----------------
     story.append(Paragraph("AUTORIZACIÓN Y FIRMA", seccion_estilo))
     
     ruta_firma_imagen = "firma_luis.png"
@@ -183,22 +183,14 @@ def exportar_orden_compra_pdf(encabezado, detalle):
         f"<b>Fecha de Autorización:</b> {fecha_colombia.strftime('%d/%m/%Y %I:%M %p')}",
         normal_text
     )
-    
-    texto_proveedor = Paragraph(
-        "<br/><br/>__________________________________<br/>"
-        "<b>ACEPTADO POR PROVEEDOR</b><br/>"
-        f"<b>Nombre:</b> {encabezado['proveedor']}<br/>"
-        "<b>Firma / Sello Recibido</b>",
-        normal_text
-    )
 
     tabla_firmas_datos = [
-        [col_firma[0], Paragraph("", normal_text)],
-        [col_firma[1], Paragraph("", normal_text)],
-        [texto_firmante, texto_proveedor]
+        [col_firma[0]],
+        [col_firma[1]],
+        [texto_firmante]
     ]
     
-    t_firmas = Table(tabla_firmas_datos, colWidths=[260, 270])
+    t_firmas = Table(tabla_firmas_datos, colWidths=[300])
     t_firmas.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
