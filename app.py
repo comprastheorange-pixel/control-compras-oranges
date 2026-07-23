@@ -32,6 +32,12 @@ def init_db():
     """)
 
     # 2. Tabla Detalle de Frutas y Calidades por Orden de Compra
+    # (Migración automática si existe la tabla antigua)
+    c.execute("PRAGMA table_info(detalle_orden_compra)")
+    cols = [column[1] for column in c.fetchall()]
+    if cols and "modo_precio" not in cols:
+        c.execute("DROP TABLE detalle_orden_compra")
+
     c.execute("""
     CREATE TABLE IF NOT EXISTS detalle_orden_compra (
         id_detalle_oc INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,7 +236,7 @@ tab1, tab2, tab3 = st.tabs([
 
 # ----------------- PESTAÑA 1: ORDEN DE COMPRA (MULTI-FRUTA Y CALIDADES) -----------------
 with tab1:
-    st.header("📄 Formato Orden de Compra Semanal (Luis Alberto García)")
+    st.header("📄 Formato Orden de Compra Semanal")
     
     if 'ultima_oc_creada' not in st.session_state:
         st.session_state.ultima_oc_creada = None
