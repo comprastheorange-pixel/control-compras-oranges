@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import io
 import os
 
@@ -117,6 +118,9 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     story = []
     styles = getSampleStyleSheet()
     
+    # Obtener hora exacta de Colombia
+    fecha_colombia = datetime.now(ZoneInfo("America/Bogota"))
+    
     titulo_estilo = ParagraphStyle('TituloPDF', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#E65100'), spaceAfter=5, alignment=1)
     subtitulo_estilo = ParagraphStyle('SubtituloPDF', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#555555'), spaceAfter=15, alignment=1)
     seccion_estilo = ParagraphStyle('SeccionPDF', fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#E65100'), spaceBefore=10, spaceAfter=6)
@@ -129,7 +133,7 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     
     datos_generales = [
         [Paragraph("N° Orden Compra:", normal_bold), Paragraph(f"OC-{encabezado['id_orden']:04d}", normal_text), Paragraph("ID Semana:", normal_bold), Paragraph(encabezado['id_semana'], normal_text)],
-        [Paragraph("Proveedor:", normal_bold), Paragraph(encabezado['proveedor'], normal_text), Paragraph("Fecha Emisión:", normal_bold), Paragraph(datetime.now().strftime("%d/%m/%Y"), normal_text)],
+        [Paragraph("Proveedor:", normal_bold), Paragraph(encabezado['proveedor'], normal_text), Paragraph("Fecha Emisión:", normal_bold), Paragraph(fecha_colombia.strftime("%d/%m/%Y"), normal_text)],
         [Paragraph("Vigencia Desde:", normal_bold), Paragraph(str(encabezado['fecha_inicio']), normal_text), Paragraph("Vigencia Hasta:", normal_bold), Paragraph(str(encabezado['fecha_fin']), normal_text)]
     ]
     t_generales = Table(datos_generales, colWidths=[110, 150, 110, 160])
@@ -164,7 +168,6 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     # ----------------- BLOQUE DE FIRMA LUIS ALBERTO GARCIA -----------------
     story.append(Paragraph("AUTORIZACIÓN Y FIRMA", seccion_estilo))
     
-    # Si subes un archivo "firma_luis.png" al repositorio, se cargará automáticamente la imagen.
     ruta_firma_imagen = "firma_luis.png"
     if os.path.exists(ruta_firma_imagen):
         img_firma = Image(ruta_firma_imagen, width=140, height=50)
@@ -177,7 +180,7 @@ def exportar_orden_compra_pdf(encabezado, detalle):
         "<b>LUIS ALBERTO GARCÍA</b><br/>"
         "<b>Cargo:</b> Dirección de Compras / Operaciones<br/>"
         "<b>Empresa:</b> The Oranges S.A.S.<br/>"
-        f"<b>Fecha de Autorización:</b> {datetime.now().strftime('%d/%m/%Y %I:%M %p')}",
+        f"<b>Fecha de Autorización:</b> {fecha_colombia.strftime('%d/%m/%Y %I:%M %p')}",
         normal_text
     )
     
@@ -435,7 +438,7 @@ with tab2:
         st.markdown("---")
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1: proveedor_recep = st.text_input("Proveedor", value=prov_nombre_sugerido, key="rec_prov_vinc")
-        with col_g2: fecha_ingreso = st.datetime_input("Fecha y Hora", value=datetime.now(), key="rec_f_vinc")
+        with col_g2: fecha_ingreso = st.datetime_input("Fecha y Hora", value=datetime.now(ZoneInfo("America/Bogota")), key="rec_f_vinc")
         with col_g3: doc_ref = st.text_input("N° Factura / DS / Remisión", placeholder="Ej: DS-104", key="rec_doc_vinc")
 
         conductor_placa = st.text_input("Conductor / Placa Vehículo", placeholder="Ej: ABC-123", key="rec_cond_vinc")
