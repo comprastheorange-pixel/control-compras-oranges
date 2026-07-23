@@ -133,6 +133,10 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     normal_bold = ParagraphStyle('NormalBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#222222'))
     normal_text = ParagraphStyle('NormalText', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'))
     
+    # Estilos para el recuadro de validación digital
+    val_titulo = ParagraphStyle('ValTitulo', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#1B5E20'), spaceAfter=4)
+    val_body = ParagraphStyle('ValBody', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, textColor=colors.HexColor('#2E7D32'), leading=11)
+
     story.append(Paragraph("🍊 THE ORANGES S.A.S.", titulo_estilo))
     story.append(Paragraph("ORDEN OFICIAL DE COMPRA MULTI-FRUTA Y CALIDADES", subtitulo_estilo))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#E65100'), spaceAfter=15))
@@ -169,29 +173,42 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     t_desglose = Table(datos_tabla, colWidths=[170, 110, 120, 130])
     t_desglose.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F5F5F5')), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')), ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#FFE0B2'))]))
     story.append(t_desglose)
-    story.append(Spacer(1, 25))
+    story.append(Spacer(1, 15))
+
+    # --- SECCIÓN DE OBSERVACIONES ---
+    obs_texto = encabezado.get('observaciones', '').strip()
+    if obs_texto:
+        story.append(Paragraph("OBSERVACIONES Y CONDICIONES ESPECIALES", seccion_estilo))
+        t_obs = Table([[Paragraph(obs_texto, normal_text)]], colWidths=[530])
+        t_obs.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#FAFAFA')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E0E0E0')),
+            ('TOPPADDING', (0,0), (-1,-1), 8),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+            ('LEFTPADDING', (0,0), (-1,-1), 10),
+            ('RIGHTPADDING', (0,0), (-1,-1), 10)
+        ]))
+        story.append(t_obs)
+        story.append(Spacer(1, 15))
     
-    story.append(Paragraph("AUTORIZACIÓN Y FIRMA", seccion_estilo))
-    ruta_firma_imagen = "firma_luis.png"
-    if os.path.exists(ruta_firma_imagen):
-        img_firma = Image(ruta_firma_imagen, width=140, height=50)
-        col_firma = [img_firma, Paragraph("__________________________________", normal_bold)]
-    else:
-        col_firma = [Paragraph("<b><i>[ FIRMADO DIGITALMENTE ]</i></b>", ParagraphStyle('FirmaDig', parent=styles['Normal'], fontName='Helvetica-BoldOblique', fontSize=10, textColor=colors.HexColor('#1B5E20'))),
-                     Paragraph("__________________________________", normal_bold)]
+    # --- RECUADRO DE VALIDACIÓN DIGITAL (ESTILO BODEGA) ---
+    texto_validacion = [
+        Paragraph("■ DOCUMENTO VALIDADO DIGITALMENTE POR EL SISTEMA DE COMPRAS", val_titulo),
+        Paragraph("Este soporte certifica que los datos de la orden de compra fueron autorizados y cargados al sistema local de <b>The Oranges S.A.S.</b> de forma segura.", val_body),
+        Paragraph("• <b>Autorizado por:</b> Dirección de Compras / Operaciones (Luis Alberto García)", val_body),
+        Paragraph(f"• <b>Fecha de Validación:</b> {fecha_colombia.strftime('%d/%m/%Y')} a las {fecha_colombia.strftime('%I:%M %p')}.", val_body)
+    ]
 
-    texto_firmante = Paragraph(
-        "<b>LUIS ALBERTO GARCÍA</b><br/>"
-        "<b>Cargo:</b> Dirección de Compras / Operaciones<br/>"
-        "<b>Empresa:</b> The Oranges S.A.S.<br/>"
-        f"<b>Fecha de Autorización:</b> {fecha_colombia.strftime('%d/%m/%Y %I:%M %p')}",
-        normal_text
-    )
-
-    tabla_firmas_datos = [[col_firma[0]], [col_firma[1]], [texto_firmante]]
-    t_firmas = Table(tabla_firmas_datos, colWidths=[300])
-    t_firmas.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'BOTTOM'), ('LEFTPADDING', (0,0), (-1,-1), 0), ('BOTTOMPADDING', (0,0), (-1,-1), 2)]))
-    story.append(t_firmas)
+    t_val_box = Table([[texto_validacion]], colWidths=[530])
+    t_val_box.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E8F5E9')),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#4CAF50')),
+        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('RIGHTPADDING', (0,0), (-1,-1), 10)
+    ]))
+    story.append(t_val_box)
     
     doc.build(story)
     buffer.seek(0)
@@ -210,6 +227,9 @@ def exportar_soporte_bascula_pdf(orden_info, lista_frutas):
     normal_bold = ParagraphStyle('NormalBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#222222'))
     normal_text = ParagraphStyle('NormalText', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'))
     
+    val_titulo = ParagraphStyle('ValTitulo', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#1B5E20'), spaceAfter=4)
+    val_body = ParagraphStyle('ValBody', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, textColor=colors.HexColor('#2E7D32'), leading=11)
+
     story.append(Paragraph("🍊 THE ORANGES S.A.S.", titulo_estilo))
     story.append(Paragraph("SOPORTE OFICIAL DE BÁSCULA Y RECEPCIÓN DE FRUTA", subtitulo_estilo))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#2E7D32'), spaceAfter=15))
@@ -263,6 +283,26 @@ def exportar_soporte_bascula_pdf(orden_info, lista_frutas):
     t_pago = Table(datos_pago, colWidths=[370, 160])
     t_pago.setStyle(TableStyle([('LINEBELOW', (0,0), (-1,-1), 0.5, colors.HexColor('#E0E0E0')), ('BACKGROUND', (0,2), (-1,2), colors.HexColor('#FFEBEE'))]))
     story.append(t_pago)
+    story.append(Spacer(1, 15))
+
+    # Recuadro de Validación Digital Recepción
+    texto_val_rec = [
+        Paragraph("■ DOCUMENTO VALIDADO DIGITALMENTE POR EL SISTEMA DE BODEGA", val_titulo),
+        Paragraph("Este soporte certifica que los datos de báscula fueron verificados y cargados al sistema local de <b>The Oranges S.A.S.</b> de forma segura.", val_body),
+        Paragraph("• <b>Responsable de Bodega:</b> Juan Carlos Perlaza", val_body),
+        Paragraph(f"• <b>Fecha de Validación:</b> {str(orden_info['fecha'])}.", val_body)
+    ]
+
+    t_val_rec = Table([[texto_val_rec]], colWidths=[530])
+    t_val_rec.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E8F5E9')),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#4CAF50')),
+        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('LEFTPADDING', (0,0), (-1,-1), 10),
+        ('RIGHTPADDING', (0,0), (-1,-1), 10)
+    ]))
+    story.append(t_val_rec)
     
     doc.build(story)
     buffer.seek(0)
@@ -373,7 +413,14 @@ with tab1:
             conn.commit()
             conn.close()
             
-            encabezado = {"id_orden": id_oc_creada, "id_semana": id_semana, "proveedor": proveedor_oc, "fecha_inicio": f_inc, "fecha_fin": f_fin}
+            encabezado = {
+                "id_orden": id_oc_creada, 
+                "id_semana": id_semana, 
+                "proveedor": proveedor_oc, 
+                "fecha_inicio": f_inc, 
+                "fecha_fin": f_fin,
+                "observaciones": obs_oc
+            }
             st.session_state.ultima_oc_creada = (encabezado, frutas_oc_capturadas)
             st.session_state.num_frutas_oc = 1
             st.success(f"✅ Orden de Compra OC-{id_oc_creada:04d} emitida exitosamente.")
@@ -484,7 +531,6 @@ with tab2:
 
                 tot_k_f = rk_1 + rk_2 + rk_3
                 
-                # Campo adicional para fruta dañada
                 col_d1, col_d2 = st.columns(2)
                 with col_d1:
                     kg_danado = st.number_input(f"⚠️ Fruta Dañada/Averiada (Kg) en {f_nom}", min_value=0.0, max_value=float(tot_k_f), step=1.0, key=f"dan_cal_{idx}")
@@ -494,10 +540,8 @@ with tab2:
                 kg_utiles = max(0.0, tot_k_f - kg_danado)
                 
                 if descontar_danado:
-                    # Se liquidan únicamente los kilos útiles
                     subt_f = ((rk_1 * rp_1) + (rk_2 * rp_2) + (rk_3 * rp_3)) * (kg_utiles / tot_k_f) if tot_k_f > 0 else 0.0
                 else:
-                    # Se liquida el total pesado en báscula
                     subt_f = (rk_1 * rp_1) + (rk_2 * rp_2) + (rk_3 * rp_3)
 
                 pr_prom_f = (subt_f / kg_utiles) if kg_utiles > 0 else 0.0
