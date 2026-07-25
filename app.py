@@ -17,7 +17,7 @@ st.set_page_config(
 # 2. BASE DE DATOS Y FUNCIONES HELPER
 # -----------------------------------------------------------------------------
 def init_db():
-    """Crea las tablas en SQLite si no existen."""
+    """Crea y actualiza las tablas en SQLite si no existen."""
     conn = sqlite3.connect("compras_oranges.db")
     c = conn.cursor()
     
@@ -36,7 +36,7 @@ def init_db():
     )
     """)
     
-    # Tabla para los Ingresos a Bodega (Recepción)
+    # Tabla para los Ingresos a Bodega (Recepción con Calidades y Mermas)
     c.execute("""
     CREATE TABLE IF NOT EXISTS ingresos_bodega (
         id_ingreso INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +48,13 @@ def init_db():
         cant_canastillas INTEGER,
         peso_bruto REAL,
         peso_tara REAL,
+        kg_primera REAL DEFAULT 0,
+        kg_segunda REAL DEFAULT 0,
+        kg_promedio REAL DEFAULT 0,
+        kg_danada REAL DEFAULT 0,
+        porcentaje_merma REAL DEFAULT 0,
         peso_neto REAL,
+        observaciones TEXT,
         FOREIGN KEY (id_orden_ref) REFERENCES ordenes_compra(id_orden)
     )
     """)
@@ -126,9 +132,9 @@ with tab1:
                 ["Precio Único / Global", "Desglosado por Calidad"],
                 horizontal=True
             )
-            precio_pactado = st.number_input("Precio Pactado/Kg ($)", min_value=0.0, step=50.0)
+            precio_pactado = st.number_input("Precio Pactado/Kg Base ($)", min_value=0.0, step=50.0)
             
-        st.markdown(f"**Subtotal Fruta:** ${cant_kg * precio_pactado:,.2f}")
+        st.markdown(f"**Subtotal Fruta Proyectado:** ${cant_kg * precio_pactado:,.2f}")
         
         guardar_oc = st.form_submit_button("Guardar Orden de Compra")
         
@@ -154,7 +160,7 @@ with tab1:
         conn = sqlite3.connect("compras_oranges.db")
         df_plan = pd.read_sql_query("""
             SELECT id_orden as 'ID OC', id_semana as 'Semana', proveedor as 'Proveedor', 
-                   fruta as 'Fruta', cantidad_kg as 'Kg Pactados', precio_pactado as 'Precio/Kg ($)',
+                   fruta as 'Fruta', cantidad_kg as 'Kg Pactados', precio_pactado as 'Precio Base/Kg ($)',
                    (cantidad_kg * precio_pactado) as 'Total Proyectado ($)'
             FROM ordenes_compra
         """, conn)
@@ -200,7 +206,6 @@ with tab2:
             fecha_hora_str = datetime.now().strftime("%Y/%m/%d, %H:%M")
             fecha_hora = st.text_input("Fecha y Hora", value=fecha_hora_str, disabled=True)
         with col_rec3:
-            # AUTOMATIZACIÓN DEL CAMPO REMISIÓN / DS
             remision_auto = generar_siguiente_remision()
             factura_ds = st.text_input(
                 "N° Factura / DS / Remisión", 
@@ -219,12 +224,12 @@ with tab2:
             peso_tara_unitario = st.number_input("Peso Tara por Canastilla (Kg)", value=2.00, step=0.10)
         with col_bas2:
             formula_pesos = st.text_area(
-                "Pesos de Canastillas", 
+                "Pesos de Canastillas (Total Recibido)", 
                 value="111.85*5,116.45*5,109*5,111.75*5,111.80*5,108.40*5,109.70*5,72.75*3,38.25*2",
                 help="Formato: peso*cantidad separados por coma."
             )
         
-        # Procesamiento dinámico de la cadena de pesaje
+        # Procesamiento del pesaje bruto total
         peso_bruto_total = 0.0
         total_canastillas = 0
         try:
@@ -241,26 +246,52 @@ with tab2:
             st.warning("⚠️ Revisa la sintaxis introducida en la casilla de peso por canastillas.")
 
         peso_tara_total = total_canastillas * peso_tara_unitario
-        peso_neto_total = max(0.0, peso_bruto_total - peso_tara_total)
+        peso_neto_bruto = max(0.0, peso_bruto_total - peso_tara_total)
+
+        # -----------------------------------------------------------------------------
+        # DESGLOSE POR CALIDADES Y FRUTA DAÑADA
+        # -----------------------------------------------------------------------------
+        st.markdown("---")
+        st.subheader("📊 Desglose por Calidades y Fruta Dañada (Mermas)")
+        
+        col_cal1, col_cal2, col_cal3, col_cal4 = st.columns(4)
+        
+        with col_cal1:
+            kg_primera = st.number_input("🥇 Calidad Primera (Kg)", min_value=0.0, value=peso_neto_bruto, step=5.0)
+        with col_cal2:
+            kg_segunda = st.number_input("🥈 Calidad Segunda (Kg)", min_value=0.0, value=0.0, step=5.0)
+        with col_cal3:
+            kg_promedio = st.number_input("⚖️ Fruta Promedio (Kg)", min_value=0.0, value=0.0, step=5.0)
+        with col_cal4:
+            kg_danada = st.number_input("⚠️ Fruta Dañada / Rechazo (Kg)", min_value=0.0, value=0.0, step=1.0)
+
+        # Cálculo de merma y peso neto final útil
+        porcentaje_merma = (kg_danada / peso_bruto_total * 100) if peso_bruto_total > 0 else 0.0
+        peso_neto_util = max(0.0, (kg_primera + kg_segunda + kg_promedio) - kg_danada) if (kg_primera + kg_segunda + kg_promedio) > 0 else max(0.0, peso_neto_bruto - kg_danada)
         
         st.info(
-            f"📑 **Báscula:** {total_canastillas} canastillas | "
-            f"**Bruto:** {peso_bruto_total:,.2f} Kg | "
-            f"**Tara:** -{peso_tara_total:,.2f} Kg | "
-            f"**Neto:** {peso_neto_total:,.2f} Kg"
+            f"📑 **Resumen Báscula:** {total_canastillas} canastillas | **Bruto:** {peso_bruto_total:,.2f} Kg | **Tara:** -{peso_tara_total:,.2f} Kg\n\n"
+            f"🚨 **Fruta Dañada:** {kg_danada:,.2f} Kg ({porcentaje_merma:.2f}% Merma) | "
+            f"✅ **Peso Neto Útil a Liquidar:** {peso_neto_util:,.2f} Kg"
         )
         
+        observaciones = st.text_area("Observaciones de la Recepción (Estado de la fruta, novedades)", placeholder="Ej: Fruta con 15 Kg de sobremadura en el fondo del lote.")
+
         if st.button("📥 Registrar Entrada a Bodega", type="primary"):
             conn = sqlite3.connect("compras_oranges.db")
             c = conn.cursor()
             c.execute("""
                 INSERT INTO ingresos_bodega 
-                (id_orden_ref, proveedor, fecha_hora, factura_ds, conductor, cant_canastillas, peso_bruto, peso_tara, peso_neto)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (int(oc_datos['id_orden']), oc_datos['proveedor'], fecha_hora, factura_ds, conductor, total_canastillas, peso_bruto_total, peso_tara_total, peso_neto_total))
+                (id_orden_ref, proveedor, fecha_hora, factura_ds, conductor, cant_canastillas, peso_bruto, peso_tara, kg_primera, kg_segunda, kg_promedio, kg_danada, porcentaje_merma, peso_neto, observaciones)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                int(oc_datos['id_orden']), oc_datos['proveedor'], fecha_hora, factura_ds, conductor, 
+                total_canastillas, peso_bruto_total, peso_tara_total, kg_primera, kg_segunda, 
+                kg_promedio, kg_danada, porcentaje_merma, peso_neto_util, observaciones
+            ))
             conn.commit()
             conn.close()
-            st.success(f"✅ Recepción registrada correctamente bajo la remisión/factura '{factura_ds}'.")
+            st.success(f"✅ Recepción registrada correctamente bajo la remisión '{factura_ds}'.")
             st.rerun()
 
 # -----------------------------------------------------------------------------
@@ -288,8 +319,9 @@ with tab3:
             df_recepciones = pd.read_sql_query("""
                 SELECT ib.id_ingreso as 'ID Ingreso', ib.factura_ds as 'Factura/Remisión', 
                        ib.fecha_hora as 'Fecha/Hora', ib.proveedor as 'Proveedor', oc.fruta as 'Fruta',
-                       ib.peso_neto as 'Peso Neto (Kg)', oc.precio_pactado as 'Precio Pactado ($)',
-                       (ib.peso_neto * oc.precio_pactado) as 'Total Valor ($)'
+                       ib.peso_bruto as 'Peso Bruto (Kg)', ib.kg_danada as 'Fruta Dañada (Kg)', 
+                       ib.porcentaje_merma as '% Merma', ib.peso_neto as 'Peso Neto Útil (Kg)', 
+                       oc.precio_pactado as 'Precio Pactado ($)', (ib.peso_neto * oc.precio_pactado) as 'Total Liquidado ($)'
                 FROM ingresos_bodega ib
                 JOIN ordenes_compra oc ON ib.id_orden_ref = oc.id_orden
             """, conn)
@@ -298,10 +330,11 @@ with tab3:
             if df_recepciones.empty:
                 st.info("ℹ️ Aún no hay recepciones registradas en bodega.")
             else:
-                m1, m2, m3 = st.columns(3)
+                m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Total Recepciones", len(df_recepciones))
-                m2.metric("Volumen Total Neto (Kg)", f"{df_recepciones['Peso Neto (Kg)'].sum():,.2f} Kg")
-                m3.metric("Costo Total Fruta ($)", f"${df_recepciones['Total Valor ($)'].sum():,.2f}")
+                m2.metric("Volumen Neto Útil (Kg)", f"{df_recepciones['Peso Neto Útil (Kg)'].sum():,.2f} Kg")
+                m3.metric("Total Fruta Dañada (Kg)", f"{df_recepciones['Fruta Dañada (Kg)'].sum():,.2f} Kg")
+                m4.metric("Costo Total Fruta ($)", f"${df_recepciones['Total Liquidado ($)'].sum():,.2f}")
                 
                 st.markdown("---")
                 st.subheader("Histórico de Entradas a Bodega")
