@@ -8,7 +8,7 @@ import os
 
 # Importaciones para la generación profesional de PDF
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -58,7 +58,12 @@ def init_db():
     )
     """)
 
-    # 3. Tabla Principal de Entradas a Bodega (Recepción)
+    # 3. Tabla Principal de Entradas a Bodega (Recepción) - MIGRACIÓN AUTOMÁTICA
+    c.execute("PRAGMA table_info(ordenes_recepcion)")
+    cols_rec_main = [column[1] for column in c.fetchall()]
+    if cols_rec_main and "id_orden_compra_ref" not in cols_rec_main:
+        c.execute("DROP TABLE ordenes_recepcion")
+
     c.execute("""
     CREATE TABLE IF NOT EXISTS ordenes_recepcion (
         id_orden INTEGER PRIMARY KEY AUTOINCREMENT,
