@@ -58,7 +58,7 @@ def init_db():
     )
     """)
 
-    # 3. Tabla Principal de Entradas a Bodega (Recepción) - MIGRACIÓN AUTOMÁTICA
+    # 3. Tabla Principal de Entradas a Bodega (Recepción)
     c.execute("PRAGMA table_info(ordenes_recepcion)")
     cols_rec_main = [column[1] for column in c.fetchall()]
     if cols_rec_main and "id_orden_compra_ref" not in cols_rec_main:
@@ -85,7 +85,7 @@ def init_db():
     )
     """)
 
-    # 4. Tabla Detalle de Frutas en Recepción (Bodega) con soporte para Fruta Dañada
+    # 4. Tabla Detalle de Frutas en Recepción (Bodega)
     c.execute("PRAGMA table_info(detalle_frutas_orden)")
     cols_rec = [column[1] for column in c.fetchall()]
     if cols_rec and "kg_danado" not in cols_rec:
@@ -138,7 +138,6 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     normal_bold = ParagraphStyle('NormalBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#222222'))
     normal_text = ParagraphStyle('NormalText', parent=styles['Normal'], fontName='Helvetica', fontSize=9, textColor=colors.HexColor('#333333'))
     
-    # Estilos para el recuadro de validación digital
     val_titulo = ParagraphStyle('ValTitulo', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.HexColor('#1B5E20'), spaceAfter=4)
     val_body = ParagraphStyle('ValBody', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, textColor=colors.HexColor('#2E7D32'), leading=11)
 
@@ -164,9 +163,9 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     for f in detalle:
         if f['modo'] == "Desglosado por Calidad":
             datos_tabla.append([Paragraph(f"<b>{f['fruta']}</b> (Consolidado)", normal_bold), Paragraph(f"{f['cantidad']:,.2f} Kg", normal_bold), Paragraph(f"Prom: $ {f['precio_prom']:,.2f}", normal_bold), Paragraph(f"$ {f['subtotal']:,.2f}", normal_bold)])
-            if f['kg_1'] > 0: datos_tabla.append([Paragraph("   • 🥇 Primera (1ra)", normal_text), Paragraph(f"{f['kg_1']:,.2f} Kg", normal_text), Paragraph(f"$ {f['prec_1']:,.2f}", normal_text), Paragraph(f"$ {f['kg_1']*f['prec_1']:,.2f}", normal_text)])
-            if f['kg_2'] > 0: datos_tabla.append([Paragraph("   • 🥈 Segunda (2da)", normal_text), Paragraph(f"{f['kg_2']:,.2f} Kg", normal_text), Paragraph(f"$ {f['prec_2']:,.2f}", normal_text), Paragraph(f"$ {f['kg_2']*f['prec_2']:,.2f}", normal_text)])
-            if f['kg_3'] > 0: datos_tabla.append([Paragraph("   • 🥉 Tercera (3ra)", normal_text), Paragraph(f"{f['kg_3']:,.2f} Kg", normal_text), Paragraph(f"$ {f['prec_3']:,.2f}", normal_text), Paragraph(f"$ {f['kg_3']*f['prec_3']:,.2f}", normal_text)])
+            if f['kg_1'] > 0: datos_tabla.append([Paragraph("&nbsp;&nbsp;&nbsp;• 🥇 Primera (1ra)", normal_text), Paragraph(f"{f['kg_1']:,.2f} Kg", normal_text), Paragraph(f"$ {f['prec_1']:,.2f}", normal_text), Paragraph(f"$ {f['kg_1']*f['prec_1']:,.2f}", normal_text)])
+            if f['kg_2'] > 0: datos_tabla.append([Paragraph("&nbsp;&nbsp;&nbsp;• 🥈 Segunda (2da)", normal_text), Paragraph(f"{f['kg_2']:,.2f} Kg", normal_text), Paragraph(f"$ {f['prec_2']:,.2f}", normal_text), Paragraph(f"$ {f['kg_2']*f['prec_2']:,.2f}", normal_text)])
+            if f['kg_3'] > 0: datos_tabla.append([Paragraph("&nbsp;&nbsp;&nbsp;• 🥉 Tercera (3ra)", normal_text), Paragraph(f"{f['kg_3']:,.2f} Kg", normal_text), Paragraph(f"$ {f['prec_3']:,.2f}", normal_text), Paragraph(f"$ {f['kg_3']*f['prec_3']:,.2f}", normal_text)])
         else:
             datos_tabla.append([Paragraph(f"<b>{f['fruta']}</b> (Única)", normal_text), Paragraph(f"{f['cantidad']:,.2f} Kg", normal_text), Paragraph(f"$ {f['precio_prom']:,.2f}", normal_text), Paragraph(f"$ {f['subtotal']:,.2f}", normal_text)])
             
@@ -180,7 +179,6 @@ def exportar_orden_compra_pdf(encabezado, detalle):
     story.append(t_desglose)
     story.append(Spacer(1, 15))
 
-    # --- SECCIÓN DE OBSERVACIONES ---
     obs_texto = encabezado.get('observaciones', '').strip()
     if obs_texto:
         story.append(Paragraph("OBSERVACIONES Y CONDICIONES ESPECIALES", seccion_estilo))
@@ -196,11 +194,10 @@ def exportar_orden_compra_pdf(encabezado, detalle):
         story.append(t_obs)
         story.append(Spacer(1, 15))
     
-    # --- RECUADRO DE VALIDACIÓN DIGITAL (ESTILO BODEGA) ---
     texto_validacion = [
         Paragraph("■ DOCUMENTO VALIDADO DIGITALMENTE POR EL SISTEMA DE COMPRAS", val_titulo),
         Paragraph("Este soporte certifica que los datos de la orden de compra fueron autorizados y cargados al sistema local de <b>The Oranges S.A.S.</b> de forma segura.", val_body),
-        Paragraph("• <b>Autorizado por:</b> Dirección de Compras / Operaciones (Luis Alberto García)", val_body),
+        Paragraph("• <b>Autorizado por:</b> Dirección de Compras / Operaciones", val_body),
         Paragraph(f"• <b>Fecha de Validación:</b> {fecha_colombia.strftime('%d/%m/%Y')} a las {fecha_colombia.strftime('%I:%M %p')}.", val_body)
     ]
 
@@ -290,11 +287,10 @@ def exportar_soporte_bascula_pdf(orden_info, lista_frutas):
     story.append(t_pago)
     story.append(Spacer(1, 15))
 
-    # Recuadro de Validación Digital Recepción
     texto_val_rec = [
         Paragraph("■ DOCUMENTO VALIDADO DIGITALMENTE POR EL SISTEMA DE BODEGA", val_titulo),
         Paragraph("Este soporte certifica que los datos de báscula fueron verificados y cargados al sistema local de <b>The Oranges S.A.S.</b> de forma segura.", val_body),
-        Paragraph("• <b>Responsable de Bodega:</b> Juan Carlos Perlaza", val_body),
+        Paragraph("• <b>Responsable de Bodega:</b> Control de Recepción", val_body),
         Paragraph(f"• <b>Fecha de Validación:</b> {str(orden_info['fecha'])}.", val_body)
     ]
 
@@ -430,6 +426,8 @@ with tab1:
             st.session_state.num_frutas_oc = 1
             st.success(f"✅ Orden de Compra OC-{id_oc_creada:04d} emitida exitosamente.")
             st.rerun()
+        else:
+            st.error("⚠️ Ingrese todos los campos obligatorios (Semana, Proveedor y Cantidades validas).")
 
     if st.session_state.ultima_oc_creada:
         enc, det = st.session_state.ultima_oc_creada
@@ -442,9 +440,9 @@ with tab1:
             for item in det:
                 desglose_oc_wa += f"• *{item['fruta']}*: {item['cantidad']:,.0f} Kg = ${item['subtotal']:,.2f}\n"
                 if item['modo'] == "Desglosado por Calidad":
-                    if item['kg_1'] > 0: desglose_oc_wa += f"   - 1ra: {item['kg_1']:,.0f} Kg @ ${item['prec_1']:,.0f}\n"
-                    if item['kg_2'] > 0: desglose_oc_wa += f"   - 2da: {item['kg_2']:,.0f} Kg @ ${item['prec_2']:,.0f}\n"
-                    if item['kg_3'] > 0: desglose_oc_wa += f"   - 3ra: {item['kg_3']:,.0f} Kg @ ${item['prec_3']:,.0f}\n"
+                    if item['kg_1'] > 0: desglose_oc_wa += f"    - 1ra: {item['kg_1']:,.0f} Kg @ ${item['prec_1']:,.0f}\n"
+                    if item['kg_2'] > 0: desglose_oc_wa += f"    - 2da: {item['kg_2']:,.0f} Kg @ ${item['prec_2']:,.0f}\n"
+                    if item['kg_3'] > 0: desglose_oc_wa += f"    - 3ra: {item['kg_3']:,.0f} Kg @ ${item['prec_3']:,.0f}\n"
             
             texto_wa_oc = f"*🍊 THE ORANGES - ORDEN DE COMPRA MULTI-FRUTA*\n*OC-{enc['id_orden']:04d}* | {enc['proveedor']}\n*Semana:* {enc['id_semana']}\n------------------------------------------------\n{desglose_oc_wa}------------------------------------------------\n*VALOR ESTIMADO PACTADO:* *${sum([x['subtotal'] for x in det]):,.2f}*"
             st.text_area("Copia el pedido para WhatsApp:", value=texto_wa_oc, height=150)
@@ -456,6 +454,14 @@ with tab2:
     if 'ultima_orden_guardada' not in st.session_state: st.session_state.ultima_orden_guardada = None
 
     conn = sqlite3.connect("compras_oranges.db")
+    
+    # Cálculo automático del consecutivo para DS / Factura / Remisión
+    c = conn.cursor()
+    c.execute("SELECT MAX(id_orden) FROM ordenes_recepcion")
+    max_id_rec = c.fetchone()[0]
+    next_id_rec = (max_id_rec if max_id_rec else 0) + 1
+    doc_auto_sugerido = f"DS-{next_id_rec:04d}"
+
     df_oc_activas = pd.read_sql_query("""
         SELECT id_orden_compra, id_semana, proveedor 
         FROM ordenes_compra_semanal ORDER BY id_orden_compra DESC
@@ -485,9 +491,12 @@ with tab2:
         st.markdown("---")
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1: proveedor_recep = st.text_input("Proveedor", value=prov_nombre_sugerido, key="rec_prov_vinc")
-        with col_g2: fecha_ingreso = st.datetime_input("Fecha y Hora", value=datetime.now(ZoneInfo("America/Bogota")), key="rec_f_vinc")
-        with col_g3: doc_ref = st.text_input("N° Factura / DS / Remisión", placeholder="Ej: DS-104", key="rec_doc_vinc")
+        with col_g2: fecha_ingreso = st.time_input("Hora de Ingreso", value=datetime.now(ZoneInfo("America/Bogota")).time(), key="rec_f_vinc")
+        with col_g3: 
+            # Se genera automáticamente la secuencia DS-XXXX y se puede editar si traen un número físico
+            doc_ref = st.text_input("N° Factura / DS / Remisión (Automático)", value=doc_auto_sugerido, key="rec_doc_vinc")
 
+        fecha_final_ingreso = datetime.combine(datetime.now(ZoneInfo("America/Bogota")).date(), fecha_ingreso)
         conductor_placa = st.text_input("Conductor / Placa Vehículo", placeholder="Ej: ABC-123", key="rec_cond_vinc")
 
         # Calculadora de Báscula
@@ -557,112 +566,132 @@ with tab2:
             else:
                 col_rf1, col_rf2, col_rf3 = st.columns(3)
                 with col_rf1:
-                    kilos_reales = st.number_input(f"Kilos Reales Recibidos ({f_nom})", min_value=0.0, value=float(neto_calculado_bascula if len(frutas_sugeridas_orden) == 1 else f_cant), step=10.0, key=f"vinc_k_{idx}")
+                    tot_k_f = st.number_input(f"Kg Reales Recibidos - {f_nom}", min_value=0.0, value=float(f_cant), step=10.0, key=f"rk_u_{idx}")
                 with col_rf2:
-                    precio_real = st.number_input(f"Precio Liquidado/Kg ($)", min_value=0.0, value=float(f_prom), step=50.0, key=f"vinc_p_{idx}")
+                    pr_prom_f = st.number_input(f"Precio Real / Kg ($)", min_value=0.0, value=float(f_prom), step=50.0, key=f"rp_u_{idx}")
                 with col_rf3:
-                    kg_danado = st.number_input(f"⚠️ Fruta Dañada/Averiada (Kg)", min_value=0.0, max_value=float(kilos_reales), step=1.0, key=f"dan_unic_{idx}")
+                    kg_danado = st.number_input(f"⚠️ Fruta Dañada (Kg)", min_value=0.0, max_value=float(tot_k_f), step=1.0, key=f"dan_u_{idx}")
 
-                descontar_danado = st.checkbox(f"¿Descontar fruta dañada de {f_nom} del pago?", value=True, key=f"desc_unic_{idx}")
-                kg_utiles = max(0.0, kilos_reales - kg_danado)
+                descontar_danado = st.checkbox(f"¿Descontar fruta dañada del pago?", value=True, key=f"desc_u_{idx}")
+                kg_utiles = max(0.0, tot_k_f - kg_danado)
+                subt_f = (kg_utiles * pr_prom_f) if descontar_danado else (tot_k_f * pr_prom_f)
+
+                st.info(f"Subtotal {f_nom}: {tot_k_f:,.1f} Kg Pesados | **{kg_danado:,.1f} Kg Dañados** | **{kg_utiles:,.1f} Kg Útiles** | Total Liquidado: **$ {subt_f:,.2f}**")
                 
-                kilos_a_pagar = kg_utiles if descontar_danado else kilos_reales
-                subt_real = kilos_a_pagar * precio_real
-                
-                st.markdown(f"**Neto Útil:** {kg_utiles:,.1f} Kg | **Subtotal Liquidado:** $ {subt_real:,.2f}")
-                valor_total_recepcion += subt_real
-                frutas_recepcion_capturadas.append({"fruta": f_nom, "kilos": kilos_reales, "kg_danado": kg_danado, "utiles": kg_utiles, "precio": precio_real, "subtotal": subt_real, "kg_1": 0, "pr_1": 0, "kg_2": 0, "pr_2": 0, "kg_3": 0, "pr_3": 0})
+                valor_total_recepcion += subt_f
+                frutas_recepcion_capturadas.append({"fruta": f_nom, "kilos": tot_k_f, "kg_danado": kg_danado, "utiles": kg_utiles, "precio": pr_prom_f, "subtotal": subt_f, "kg_1": 0.0, "pr_1": 0.0, "kg_2": 0.0, "pr_2": 0.0, "kg_3": 0.0, "pr_3": 0.0})
 
         st.markdown("---")
-        st.markdown("#### 💳 Condición de Pago de la Entrega")
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1: condicion_pago = st.selectbox("Estado de Pago", ["A Crédito (Pendiente 100%)", "Abonado (Pago parcial)", "Contado / Cancelado ($0 Pendiente)"], key="vinc_cond_pago")
+        st.markdown("#### 💰 Estado Financiero y Condición de Pago")
         
-        monto_abonado = 0.0
-        if condicion_pago == "Abonado (Pago parcial)":
-            with col_p2: monto_abonado = st.number_input("Monto Abonado ($)", min_value=0.0, max_value=float(valor_total_recepcion), step=50000.0, key="vinc_monto_ab")
-        elif condicion_pago == "Contado / Cancelado ($0 Pendiente)":
-            monto_abonado = valor_total_recepcion
-
-        saldo_pendiente = max(0.0, valor_total_recepcion - monto_abonado)
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            estado_pago = st.selectbox("Estado del Pago", ["Pendiente", "Abonado parcial", "Pagado Total"])
+        with col_p2:
+            monto_abonado = st.number_input("Monto Abonado ($)", min_value=0.0, max_value=float(valor_total_recepcion), step=50000.0)
+            if estado_pago == "Pagado Total":
+                monto_abonado = valor_total_recepcion
         with col_p3:
-            st.markdown(f"### **Total Entrega:** $ {valor_total_recepcion:,.2f}")
-            st.markdown(f"### **Saldo Pendiente:** :red[$ {saldo_pendiente:,.2f}]")
+            saldo_pendiente = max(0.0, valor_total_recepcion - monto_abonado)
+            st.markdown(f"**Saldo Pendiente por Pagar:**\n# $ {saldo_pendiente:,.2f}")
 
-        observaciones = st.text_area("Observaciones o Novedades de Calidad en Bodega", key="vinc_obs")
+        obs_recepcion = st.text_area("Observaciones de Entrada de Bodega", key="obs_rec_vinc")
 
-        if st.button("💾 Guardar Ingreso a Bodega y Generar Soporte", type="primary", use_container_width=True):
-            if proveedor_recep and valor_total_recepcion >= 0:
+        if st.button("💾 Registrar Entrada de Bodega", type="primary", use_container_width=True):
+            if proveedor_recep and valor_total_recepcion > 0:
                 conn = sqlite3.connect("compras_oranges.db")
                 c = conn.cursor()
                 c.execute("""
-                    INSERT INTO ordenes_recepcion (id_orden_compra_ref, fecha_ingreso, proveedor, conductor_placa, documento_ref, canastillas_totales, peso_bruto_total, tara_total, peso_neto_total, valor_total, estado_pago, monto_abonado, saldo_pendiente, observaciones)
+                    INSERT INTO ordenes_recepcion 
+                    (id_orden_compra_ref, fecha_ingreso, proveedor, conductor_placa, documento_ref, canastillas_totales, peso_bruto_total, tara_total, peso_neto_total, valor_total, estado_pago, monto_abonado, saldo_pendiente, observaciones)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (id_oc_seleccionada, fecha_ingreso.strftime("%Y-%m-%d %H:%M:%S"), proveedor_recep, conductor_placa, doc_ref, conteo_canastillas, bruto_total, tara_total, sum([item['kilos'] for item in frutas_recepcion_capturadas]), valor_total_recepcion, condicion_pago, monto_abonado, saldo_pendiente, observaciones))
+                """, (id_oc_seleccionada, fecha_final_ingreso.strftime("%Y-%m-%d %H:%M:%S"), proveedor_recep, conductor_placa, doc_ref, conteo_canastillas, bruto_total, tara_total, neto_calculado_bascula, valor_total_recepcion, estado_pago, monto_abonado, saldo_pendiente, obs_recepcion))
                 
-                id_orden_creada = c.lastrowid
+                id_rec_creada = c.lastrowid
                 for item in frutas_recepcion_capturadas:
-                    if item['kilos'] > 0:
-                        c.execute("""
-                            INSERT INTO detalle_frutas_orden 
-                            (id_orden, fruta, kg_primera, precio_primera, kg_segunda, precio_segunda, kg_tercera, precio_tercera, kg_danado, kilos_netos, kilos_utiles, precio_kg, subtotal) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (id_orden_creada, item['fruta'], item['kg_1'], item['pr_1'], item['kg_2'], item['pr_2'], item['kg_3'], item['pr_3'], item['kg_danado'], item['kilos'], item['utiles'], item['precio'], item['subtotal']))
+                    c.execute("""
+                        INSERT INTO detalle_frutas_orden
+                        (id_orden, fruta, kg_primera, precio_primera, kg_segunda, precio_segunda, kg_tercera, precio_tercera, kg_danado, kilos_netos, kilos_utiles, precio_kg, subtotal)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (id_rec_creada, item['fruta'], item['kg_1'], item['pr_1'], item['kg_2'], item['pr_2'], item['kg_3'], item['pr_3'], item['kg_danado'], item['kilos'], item['utiles'], item['precio'], item['subtotal']))
+                
                 conn.commit()
                 conn.close()
-                
-                orden_info = {"id_orden": id_orden_creada, "fecha": fecha_ingreso.strftime("%d/%m/%Y %I:%M %p"), "proveedor": proveedor_recep, "documento": doc_ref, "conductor": conductor_placa, "canastillas": conteo_canastillas, "bruto": bruto_total, "tara": tara_total, "neto": sum([item['kilos'] for item in frutas_recepcion_capturadas]), "valor_total": valor_total_recepcion, "estado_pago": condicion_pago, "monto_abonado": monto_abonado, "saldo_pendiente": saldo_pendiente, "observaciones": observaciones}
-                st.session_state.ultima_orden_guardada = (orden_info, frutas_recepcion_capturadas)
-                st.success(f"✅ Ingreso REC-{id_orden_creada:04d} registrado exitosamente.")
+
+                orden_info_pdf = {
+                    "id_orden": id_rec_creada,
+                    "fecha": fecha_final_ingreso.strftime("%d/%m/%Y %I:%M %p"),
+                    "proveedor": proveedor_recep,
+                    "documento": doc_ref,
+                    "conductor": conductor_placa,
+                    "estado_pago": estado_pago,
+                    "canastillas": conteo_canastillas,
+                    "bruto": bruto_total,
+                    "tara": tara_total,
+                    "neto": neto_calculado_bascula,
+                    "valor_total": valor_total_recepcion,
+                    "monto_abonado": monto_abonado,
+                    "saldo_pendiente": saldo_pendiente
+                }
+                st.session_state.ultima_orden_guardada = (orden_info_pdf, frutas_recepcion_capturadas)
+                st.success(f"✅ Entrada de bodega REC-{id_rec_creada:04d} registrada exitosamente con Soporte {doc_ref}.")
                 st.rerun()
 
-        if st.session_state.ultima_orden_guardada:
-            ord_info, lista_f = st.session_state.ultima_orden_guardada
-            col_pdf, col_wa = st.columns(2)
-            with col_pdf:
-                pdf_bytes = exportar_soporte_bascula_pdf(ord_info, lista_f)
-                st.download_button("📄 Descargar Soporte Báscula (PDF)", data=pdf_bytes, file_name=f"Soporte_REC_{ord_info['id_orden']:04d}.pdf", mime="application/pdf")
-            with col_wa:
-                desglose_wa = ""
-                for item in lista_f:
-                    texto_dan = f" (⚠️ {item['kg_danado']:,.1f} Kg dañados)" if item['kg_danado'] > 0 else ""
-                    desglose_wa += f"• {item['fruta']}: {item['utiles']:,.1f} Kg útiles{texto_dan} @ ${item['precio']:,.0f} = ${item['subtotal']:,.2f}\n"
-                
-                texto_wa = f"*🍊 THE ORANGES - SOPORTE DE BODEGA*\n*REC-{ord_info['id_orden']:04d}* | {ord_info['proveedor']}\n{desglose_wa}------------------------------------------------\n*TOTAL LIQUIDADO:* *${ord_info['valor_total']:,.2f}*\n*Saldo Pendiente:* *${ord_info['saldo_pendiente']:,.2f}*"
-                st.text_area("Texto para WhatsApp:", value=texto_wa, height=130)
+    if st.session_state.ultima_orden_guardada:
+        info_rec, det_rec = st.session_state.ultima_orden_guardada
+        col_pdf_rec, col_wa_rec = st.columns(2)
+        with col_pdf_rec:
+            pdf_bytes_rec = exportar_soporte_bascula_pdf(info_rec, det_rec)
+            st.download_button("📄 Descargar Soporte de Báscula (PDF)", data=pdf_bytes_rec, file_name=f"Soporte_Bascula_REC_{info_rec['id_orden']:04d}.pdf", mime="application/pdf")
+        with col_wa_rec:
+            desglose_rec_wa = ""
+            for f in det_rec:
+                desglose_rec_wa += f"• *{f['fruta']}*: {f['utiles']:,.1f} Kg útiles (${f['subtotal']:,.2f})\n"
+                if f['kg_danado'] > 0: desglose_rec_wa += f"    - Dañado descontado: {f['kg_danado']:,.1f} Kg\n"
+            
+            texto_wa_rec = f"*🍊 THE ORANGES - RECEPCIÓN BODEGA*\n*REC-{info_rec['id_orden']:04d}* | {info_rec['proveedor']}\n*Doc Ref:* {info_rec['documento']}\n*Fecha:* {info_rec['fecha']}\n------------------------------------------------\n{desglose_rec_wa}------------------------------------------------\n*VALOR TOTAL:* *${info_rec['valor_total']:,.2f}*\n*ABONADO:* ${info_rec['monto_abonado']:,.2f}\n*SALDO:* *${info_rec['saldo_pendiente']:,.2f}*"
+            st.text_area("Copia la recepción para WhatsApp:", value=texto_wa_rec, height=150)
 
-# ----------------- PESTAÑA 3: DASHBOARD DE COSTOS -----------------
+# ----------------- PESTAÑA 3: DASHBOARD Y GESTIÓN DE COSTOS -----------------
 with tab3:
-    st.header("📈 Dashboard de Inteligencia de Negocio")
+    st.header("📈 Dashboard de Compras, Mermas y Cuentas por Pagar")
     
     conn = sqlite3.connect("compras_oranges.db")
-    df_dash = pd.read_sql_query("""
-        SELECT d.fruta, o.fecha_ingreso as fecha, d.kilos_netos, d.kilos_utiles, d.kg_danado, d.precio_kg, d.subtotal, o.proveedor
-        FROM detalle_frutas_orden d
-        JOIN ordenes_recepcion o ON d.id_orden = o.id_orden
-    """, conn)
+    df_recepciones = pd.read_sql_query("SELECT * FROM ordenes_recepcion", conn)
+    df_detalles = pd.read_sql_query("SELECT * FROM detalle_frutas_orden", conn)
     conn.close()
 
-    if df_dash.empty:
-        st.info("ℹ️ Carga frutas en bodega para ver estadísticas visuales.")
+    if df_recepciones.empty:
+        st.info("ℹ️ No hay registros de recepciones en bodega aún para generar estadísticas.")
     else:
-        col_m1, col_m2, col_m3 = st.columns(3)
-        with col_m1: st.metric("Kilos Totales Comprados", f"{df_dash['kilos_netos'].sum():,.1f} Kg")
-        with col_m2: st.metric("Kilos Averiados / Dañados", f"{df_dash['kg_danado'].sum():,.1f} Kg")
-        with col_m3: st.metric("Porcentaje Global de Merma", f"{(df_dash['kg_danado'].sum() / df_dash['kilos_netos'].sum() * 100):,.2f} %" if df_dash['kilos_netos'].sum() > 0 else "0 %")
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        total_invertido = df_recepciones['valor_total'].sum()
+        total_saldo = df_recepciones['saldo_pendiente'].sum()
+        total_neto = df_detalles['kilos_netos'].sum()
+        total_danado = df_detalles['kg_danado'].sum()
+
+        kpi1.metric("Total Invertido Compras", f"$ {total_invertido:,.2f}")
+        kpi2.metric("Saldo Pendiente a Proveedores", f"$ {total_saldo:,.2f}", delta_color="inverse")
+        kpi3.metric("Total Kilos Recibidos", f"{total_neto:,.1f} Kg")
+        kpi4.metric("Total Mermas / Dañado", f"{total_danado:,.1f} Kg", delta=f"{(total_danado/total_neto*100) if total_neto > 0 else 0:.1f}% del total", delta_color="inverse")
 
         st.markdown("---")
-        st.subheader("1. Variación de Precio por Kilo ($/Kg)")
-        frutas_disponibles = sorted(list(df_dash['fruta'].unique()))
-        sel_f_dash = st.selectbox("Selecciona fruta:", frutas_disponibles)
-        df_f_filt = df_dash[df_dash['fruta'] == sel_f_dash].sort_values('fecha')
-        if not df_f_filt.empty:
-            st.line_chart(df_f_filt, x='fecha', y='precio_kg', use_container_width=True)
-
         col_g1, col_g2 = st.columns(2)
+        
         with col_g1:
-            st.subheader("2. Fruta Dañada por Proveedor (Kg)")
-            st.bar_chart(df_dash.groupby('proveedor')['kg_danado'].sum().reset_index(), x='proveedor', y='kg_danado', use_container_width=True)
+            st.subheader("📊 Distribución de Kilos por Fruta")
+            df_frutas_sum = df_detalles.groupby("fruta")[["kilos_netos", "kilos_utiles", "kg_danado"]].sum()
+            st.bar_chart(df_frutas_sum[["kilos_utiles", "kg_danado"]])
+
         with col_g2:
-            st.subheader("3. Inversión por Fruta ($)")
-            st.bar_chart(df_dash.groupby('fruta')['subtotal'].sum().reset_index(), x='fruta', y='subtotal', use_container_width=True)
+            st.subheader("💰 Inversión Total por Fruta ($)")
+            df_frutas_val = df_detalles.groupby("fruta")["subtotal"].sum()
+            st.bar_chart(df_frutas_val)
+
+        st.markdown("---")
+        st.subheader("📋 Cuentas por Pagar a Proveedores")
+        df_pendientes = df_recepciones[df_recepciones['saldo_pendiente'] > 0][['id_orden', 'fecha_ingreso', 'proveedor', 'documento_ref', 'valor_total', 'monto_abonado', 'saldo_pendiente', 'estado_pago']]
+        if not df_pendientes.empty:
+            st.dataframe(df_pendientes, use_container_width=True)
+        else:
+            st.success("🎉 ¡No hay saldos pendientes de pago a proveedores!")
