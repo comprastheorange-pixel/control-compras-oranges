@@ -17,6 +17,7 @@ st.set_page_config(
 # 2. BASE DE DATOS Y FUNCIONES HELPER
 # -----------------------------------------------------------------------------
 def init_db():
+    """Crea las tablas en SQLite si no existen."""
     conn = sqlite3.connect("compras_oranges.db")
     c = conn.cursor()
     
@@ -59,17 +60,20 @@ init_db()
 
 def generar_siguiente_remision():
     """Consulta la BD y autogenera 'Remision 001', 'Remision 002', etc."""
-    conn = sqlite3.connect("compras_oranges.db")
-    c = conn.cursor()
-    c.execute("SELECT factura_ds FROM ingresos_bodega ORDER BY id_ingreso DESC LIMIT 1")
-    ultimo = c.fetchone()
-    conn.close()
+    try:
+        conn = sqlite3.connect("compras_oranges.db")
+        c = conn.cursor()
+        c.execute("SELECT factura_ds FROM ingresos_bodega ORDER BY id_ingreso DESC LIMIT 1")
+        ultimo = c.fetchone()
+        conn.close()
 
-    if ultimo and ultimo[0]:
-        numeros = re.findall(r'\d+', ultimo[0])
-        if numeros:
-            siguiente = int(numeros[-1]) + 1
-            return f"Remision {siguiente:03d}"
+        if ultimo and ultimo[0]:
+            numeros = re.findall(r'\d+', ultimo[0])
+            if numeros:
+                siguiente = int(numeros[-1]) + 1
+                return f"Remision {siguiente:03d}"
+    except Exception:
+        pass
             
     return "Remision 001"
 
@@ -101,7 +105,7 @@ with tab1:
         col_oc1, col_oc2, col_oc3 = st.columns(3)
         
         with col_oc1:
-            id_semana = st.text_input("ID de la Semana (Ej: SEM-2026-29)", value="SEM-2026-30")
+            id_semana = st.text_input("ID de la Semana (Ej: SEM-2026-30)", value="SEM-2026-30")
         with col_oc2:
             proveedor = st.text_input("Nombre del Proveedor", placeholder="ALIRIO")
         with col_oc3:
@@ -140,21 +144,27 @@ with tab1:
                 conn.commit()
                 conn.close()
                 st.success(f"✅ Orden de Compra guardada con éxito para {proveedor}.")
+                st.rerun()
             else:
                 st.error("⚠️ Ingrese el proveedor, la cantidad y un precio válido.")
 
     st.markdown("---")
     st.subheader("Órdenes de Compra Programadas")
-    conn = sqlite3.connect("compras_oranges.db")
-    df_plan = pd.read_sql_query("""
-        SELECT id_orden as 'ID OC', id_semana as 'Semana', proveedor as 'Proveedor', 
-               fruta as 'Fruta', cantidad_kg as 'Kg Pactados', precio_pactado as 'Precio/Kg ($)',
-               (cantidad_kg * precio_pactado) as 'Total Proyectado ($)'
-        FROM ordenes_compra
-    """, conn)
-    conn.close()
-    if not df_plan.empty:
-        st.dataframe(df_plan, use_container_width=True)
+    try:
+        conn = sqlite3.connect("compras_oranges.db")
+        df_plan = pd.read_sql_query("""
+            SELECT id_orden as 'ID OC', id_semana as 'Semana', proveedor as 'Proveedor', 
+                   fruta as 'Fruta', cantidad_kg as 'Kg Pactados', precio_pactado as 'Precio/Kg ($)',
+                   (cantidad_kg * precio_pactado) as 'Total Proyectado ($)'
+            FROM ordenes_compra
+        """, conn)
+        conn.close()
+        if not df_plan.empty:
+            st.dataframe(df_plan, use_container_width=True)
+        else:
+            st.info("No hay Órdenes de Compra registradas aún.")
+    except Exception:
+        st.info("No hay Órdenes de Compra registradas aún.")
 
 # -----------------------------------------------------------------------------
 # PESTAÑA 2: RECEPCIÓN Y BÁSCULA (BODEGA)
@@ -162,9 +172,13 @@ with tab1:
 with tab2:
     st.header("🚚 Recepción de Fruta en Bodega (Vinculada a Orden de Compra)")
     
-    conn = sqlite3.connect("compras_oranges.db")
-    df_ocs = pd.read_sql_query("SELECT id_orden, id_semana, proveedor, fruta FROM ordenes_compra", conn)
-    conn.close()
+    df_ocs = pd.DataFrame()
+    try:
+        conn = sqlite3.connect("compras_oranges.db")
+        df_ocs = pd.read_sql_query("SELECT id_orden, id_semana, proveedor, fruta FROM ordenes_compra", conn)
+        conn.close()
+    except Exception:
+        pass
     
     if df_ocs.empty:
         st.warning("⚠️ No hay Órdenes de Compra registradas. Crea una en la pestaña de Planeación Semanal.")
@@ -186,7 +200,7 @@ with tab2:
             fecha_hora_str = datetime.now().strftime("%Y/%m/%d, %H:%M")
             fecha_hora = st.text_input("Fecha y Hora", value=fecha_hora_str, disabled=True)
         with col_rec3:
-            # AUTOMATIZACIÓN DEL CAMPO FACTURA / DS / REMISIÓNN
+            # AUTOMATIZACIÓN DEL CAMPO REMISIÓN / DS
             remision_auto = generar_siguiente_remision()
             factura_ds = st.text_input(
                 "N° Factura / DS / Remisión", 
@@ -255,25 +269,42 @@ with tab2:
 with tab3:
     st.header("📈 Dashboard y Gestión de Costos")
     
-    conn = sqlite3.connect("compras_oranges.db")
-    df_recepciones = pd.read_sql_query("""
-        SELECT ib.id_ingreso as 'ID Ingreso', ib.factura_ds as 'Factura/Remisión', 
-               ib.fecha_hora as 'Fecha/Hora', ib.proveedor as 'Proveedor', oc.fruta as 'Fruta',
-               ib.peso_neto as 'Peso Neto (Kg)', oc.precio_pactado as 'Precio Pactado ($)',
-               (ib.peso_neto * oc.precio_pactado) as 'Total Valor ($)'
-        FROM ingresos_bodega ib
-        JOIN ordenes_compra oc ON ib.id_orden_ref = oc.id_orden
-    """, conn)
-    conn.close()
-    
-    if df_recepciones.empty:
-        st.info("Aún no se han registrado ingresos en bodega.")
-    else:
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Recepciones", len(df_recepciones))
-        m2.metric("Volumen Total Neto (Kg)", f"{df_recepciones['Peso Neto (Kg)'].sum():,.2f} Kg")
-        m3.metric("Costo Total Fruta ($)", f"${df_recepciones['Total Valor ($)'].sum():,.2f}")
+    has_data = False
+    try:
+        conn = sqlite3.connect("compras_oranges.db")
+        c = conn.cursor()
+        c.execute("SELECT count(*) FROM ingresos_bodega")
+        if c.fetchone()[0] > 0:
+            has_data = True
+        conn.close()
+    except Exception:
+        has_data = False
         
-        st.markdown("---")
-        st.subheader("Histórico de Entradas a Bodega")
-        st.dataframe(df_recepciones, use_container_width=True)
+    if not has_data:
+        st.info("ℹ️ Aún no se han registrado ingresos en bodega.")
+    else:
+        try:
+            conn = sqlite3.connect("compras_oranges.db")
+            df_recepciones = pd.read_sql_query("""
+                SELECT ib.id_ingreso as 'ID Ingreso', ib.factura_ds as 'Factura/Remisión', 
+                       ib.fecha_hora as 'Fecha/Hora', ib.proveedor as 'Proveedor', oc.fruta as 'Fruta',
+                       ib.peso_neto as 'Peso Neto (Kg)', oc.precio_pactado as 'Precio Pactado ($)',
+                       (ib.peso_neto * oc.precio_pactado) as 'Total Valor ($)'
+                FROM ingresos_bodega ib
+                JOIN ordenes_compra oc ON ib.id_orden_ref = oc.id_orden
+            """, conn)
+            conn.close()
+
+            if df_recepciones.empty:
+                st.info("ℹ️ Aún no hay recepciones registradas en bodega.")
+            else:
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Total Recepciones", len(df_recepciones))
+                m2.metric("Volumen Total Neto (Kg)", f"{df_recepciones['Peso Neto (Kg)'].sum():,.2f} Kg")
+                m3.metric("Costo Total Fruta ($)", f"${df_recepciones['Total Valor ($)'].sum():,.2f}")
+                
+                st.markdown("---")
+                st.subheader("Histórico de Entradas a Bodega")
+                st.dataframe(df_recepciones, use_container_width=True)
+        except Exception:
+            st.info("ℹ️ Ocurrió un inconveniente al cargar los datos. Registre una nueva orden y entrada para sincronizar.")
