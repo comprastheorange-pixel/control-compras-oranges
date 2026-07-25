@@ -51,7 +51,7 @@ def init_db():
     )
     """)
 
-    # 3. Tabla Recepciones en Bodega (incluye costo_flete y canastillas_devueltas)
+    # 3. Tabla Recepciones en Bodega
     c.execute("""
     CREATE TABLE IF NOT EXISTS ordenes_recepcion (
         id_orden INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +75,7 @@ def init_db():
     )
     """)
 
-    # Migraciones automáticas por si la DB ya existía previamente
+    # Migraciones automáticas
     c.execute("PRAGMA table_info(ordenes_recepcion)")
     cols_rec = [column[1] for column in c.fetchall()]
     if "costo_flete" not in cols_rec:
@@ -83,18 +83,16 @@ def init_db():
     if "canastillas_devueltas" not in cols_rec:
         c.execute("ALTER TABLE ordenes_recepcion ADD COLUMN canastillas_devueltas INTEGER DEFAULT 0")
 
-    # 4. Detalle Frutas en Recepción
+    # 4. Detalle Frutas en Recepción (almacena el pesaje por canastilla)
     c.execute("""
     CREATE TABLE IF NOT EXISTS detalle_frutas_orden (
         id_detalle INTEGER PRIMARY KEY AUTOINCREMENT,
         id_orden INTEGER NOT NULL,
         fruta TEXT NOT NULL,
-        kg_primera REAL DEFAULT 0,
-        precio_primera REAL DEFAULT 0,
-        kg_segunda REAL DEFAULT 0,
-        precio_segunda REAL DEFAULT 0,
-        kg_tercera REAL DEFAULT 0,
-        precio_tercera REAL DEFAULT 0,
+        num_canastillas INTEGER DEFAULT 0,
+        tara_unit_canastilla REAL DEFAULT 0,
+        peso_bruto REAL DEFAULT 0,
+        tara_calculada REAL DEFAULT 0,
         kg_danado REAL DEFAULT 0,
         kilos_netos REAL NOT NULL,
         kilos_utiles REAL NOT NULL,
@@ -103,6 +101,18 @@ def init_db():
         FOREIGN KEY (id_orden) REFERENCES ordenes_recepcion (id_orden)
     )
     """)
+
+    # Migraciones para la tabla detalle si venía de versión previa
+    c.execute("PRAGMA table_info(detalle_frutas_orden)")
+    cols_det = [column[1] for column in c.fetchall()]
+    if "num_canastillas" not in cols_det:
+        c.execute("ALTER TABLE detalle_frutas_orden ADD COLUMN num_canastillas INTEGER DEFAULT 0")
+    if "tara_unit_canastilla" not in cols_det:
+        c.execute("ALTER TABLE detalle_frutas_orden ADD COLUMN tara_unit_canastilla REAL DEFAULT 0")
+    if "peso_bruto" not in cols_det:
+        c.execute("ALTER TABLE detalle_frutas_orden ADD COLUMN peso_bruto REAL DEFAULT 0")
+    if "tara_calculada" not in cols_det:
+        c.execute("ALTER TABLE detalle_frutas_orden ADD COLUMN tara_calculada REAL DEFAULT 0")
 
     # 5. Tabla Control/Kardex de Canastillas
     c.execute("""
@@ -127,14 +137,11 @@ LISTA_FRUTAS = [
     "PIÑA", "TOMATE ARBOL", "UVA", "OTRA (Escribir nueva...)"
 ]
 
-# ----------------- FUNCIONES DE IMPRESIÓN Y PDF -----------------
+# ----------------- FUNCIONES DE PDF -----------------
 
 def generar_pdf_recepcion(id_orden):
     conn = sqlite3.connect("compras_oranges.db")
-    
-    # Obtener encabezado
     df_enc = pd.read_sql_query("SELECT * FROM ordenes_recepcion WHERE id_orden = ?", conn, params=(id_orden,))
-    # Obtener detalles
     df_det = pd.read_sql_query("SELECT * FROM detalle_frutas_orden WHERE id_orden = ?", conn, params=(id_orden,))
     conn.close()
 
@@ -153,15 +160,13 @@ def generar_pdf_recepcion(id_orden):
     value_style = ParagraphStyle('ValueStyle', parent=styles['Normal'], fontSize=9)
     table_hdr_style = ParagraphStyle('TableHdrStyle', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', textColor=colors.white)
 
-    # Encabezado Empresa
     story.append(Paragraph("<b>THE ORANGES - COMPROBANTE DE BODEGA</b>", title_style))
     story.append(Paragraph("Sistema de Control de Recepción y Liquidación de Materia Prima", subtitle_style))
     story.append(Spacer(1, 10))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#D35400'), spaceAfter=10))
 
-    # Información General
     data_info = [
-        [Paragraph("N° Recepción:", label_style), Paragraph(f"<b>#{enc['id_orden']}</b>", value_style), Paragraph("Fecha Ingrese:", label_style), Paragraph(str(enc['fecha_ingreso']), value_style)],
+        [Paragraph("N° Recepción:", label_style), Paragraph(f"<b>#{enc['id_orden']}</b>", value_style), Paragraph("Fecha Ingreso:", label_style), Paragraph(str(enc['fecha_ingreso']), value_style)],
         [Paragraph("Proveedor:", label_style), Paragraph(str(enc['proveedor']), value_style), Paragraph("Documento Ref / Factura:", label_style), Paragraph(str(enc['documento_ref']), value_style)],
         [Paragraph("Conductor / Placa:", label_style), Paragraph(str(enc['conductor_placa']), value_style), Paragraph("Estado Pago:", label_style), Paragraph(str(enc['estado_pago']), value_style)],
         [Paragraph("Canastillas Recibidas:", label_style), Paragraph(str(enc['canastillas_totales']), value_style), Paragraph("Canastillas Devueltas:", label_style), Paragraph(str(enc['canastillas_devueltas']), value_style)]
@@ -177,30 +182,30 @@ def generar_pdf_recepcion(id_orden):
     story.append(t_info)
     story.append(Spacer(1, 12))
 
-    # Tabla de Productos
-    headers = ["Fruta", "Kg Netos", "Kg Útiles", "Precio $/Kg", "Subtotal ($)"]
+    headers = ["Fruta", "Canastillas", "P. Bruto", "Tara (Kg)", "Kg Útiles", "Precio $/Kg", "Subtotal ($)"]
     data_prod = [[Paragraph(h, table_hdr_style) for h in headers]]
 
     for _, row in df_det.iterrows():
         data_prod.append([
             Paragraph(str(row['fruta']), value_style),
-            Paragraph(f"{row['kilos_netos']:,.2f}", value_style),
+            Paragraph(str(row.get('num_canastillas', 0)), value_style),
+            Paragraph(f"{row.get('peso_bruto', 0):,.2f}", value_style),
+            Paragraph(f"{row.get('tara_calculada', 0):,.2f}", value_style),
             Paragraph(f"{row['kilos_utiles']:,.2f}", value_style),
             Paragraph(f"${row['precio_kg']:,.2f}", value_style),
             Paragraph(f"${row['subtotal']:,.2f}", value_style)
         ])
 
-    t_prod = Table(data_prod, colWidths=[140, 90, 90, 100, 120])
+    t_prod = Table(data_prod, colWidths=[100, 60, 65, 65, 75, 80, 95])
     t_prod.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#D35400')),
         ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#BDC3C7')),
-        ('PADDING', (0,0), (-1,-1), 5),
+        ('PADDING', (0,0), (-1,-1), 4),
     ]))
     story.append(t_prod)
     story.append(Spacer(1, 10))
 
-    # Resumen Financiero
     data_resumen = [
         [Paragraph("Costo Flete / Transporte:", label_style), Paragraph(f"${enc['costo_flete']:,.2f}", value_style)],
         [Paragraph("Valor Total Fruta:", label_style), Paragraph(f"<b>${enc['valor_total']:,.2f}</b>", value_style)],
@@ -224,7 +229,7 @@ def generar_pdf_recepcion(id_orden):
     buffer.seek(0)
     return buffer
 
-# ----------------- ESTRUCTURA DE PESTAÑAS PRINCIPALES -----------------
+# ----------------- ESTRUCTURA DE PESTAÑAS -----------------
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "📋 Planeación Semanal (OC)", 
@@ -268,7 +273,7 @@ with tab1:
             
             if modo_p == "Precio Único":
                 with cf3:
-                    kg_1 = st.number_input(f"Kilos Pacatados #{i+1}", min_value=0.0, step=10.0, key=f"oc_kg1_{i}")
+                    kg_1 = st.number_input(f"Kilos Pactados #{i+1}", min_value=0.0, step=10.0, key=f"oc_kg1_{i}")
                 with cf4:
                     p_1 = st.number_input(f"Precio por Kilo #{i+1}", min_value=0.0, step=50.0, key=f"oc_p1_{i}")
                 cant_tot = kg_1
@@ -322,7 +327,7 @@ with tab1:
             st.error("⚠️ Por favor completa el proveedor y el identificador de la semana.")
 
 # ==============================================================================
-# PESTAÑA 2: RECEPCIÓN Y BÁSCULA
+# PESTAÑA 2: RECEPCIÓN Y BÁSCULA (CON PESAJE POR CANASTILLAS RESTAURADO)
 # ==============================================================================
 with tab2:
     st.header("🚛 Recepción de Materia Prima en Báscula")
@@ -347,7 +352,6 @@ with tab2:
             conductor_placa = st.text_input("Conductor / Placa del Vehículo", key="rec_cond")
         with col_r2:
             doc_ref = st.text_input("Documento de Referencia / Factura / DS", key="rec_doc")
-            canastillas_tot = st.number_input("Canastillas Recibidas", min_value=0, step=1, key="rec_can_rec")
             canastillas_dev = st.number_input("Canastillas Devueltas al Conductor", min_value=0, step=1, key="rec_can_dev")
         with col_r3:
             costo_flete_ingresado = st.number_input("Costo del Flete / Transporte ($)", min_value=0.0, step=5000.0, key="rec_flete")
@@ -355,54 +359,70 @@ with tab2:
             monto_abonado = st.number_input("Monto Abonado en Recepción ($)", min_value=0.0, step=10000.0)
 
         st.markdown("---")
-        st.subheader("⚖️ Pesaje y Clasificación de Fruta")
+        st.subheader("⚖️ Pesaje y Clasificación por Canastillas y Fruta")
 
-        num_frutas_rec = st.number_input("Cantidad de frutas en este despacho", min_value=1, max_value=5, value=1)
+        num_frutas_rec = st.number_input("Cantidad de frutas/lotes a pesarle al proveedor", min_value=1, max_value=10, value=1)
         
         detalles_recepcion = []
         peso_bruto_acum = 0.0
         tara_acum = 0.0
+        canastillas_acum = 0
         valor_total_fruta = 0.0
 
         for i in range(int(num_frutas_rec)):
-            st.markdown(f"### **Fruta #{i+1}**")
+            st.markdown(f"#### **Lote / Fruta #{i+1}**")
             col_f1, col_f2 = st.columns([2, 2])
             with col_f1:
                 fruta_r = st.selectbox(f"Seleccionar Fruta #{i+1}", LISTA_FRUTAS, key=f"rf_f_{i}")
                 if fruta_r == "OTRA (Escribir nueva...)":
                     fruta_r = st.text_input(f"Nombre de fruta #{i+1}", key=f"rf_custom_{i}")
             
-            st.markdown("**Pesos en Báscula (Kg):**")
-            cp1, cp2, cp3, cp4 = st.columns(4)
+            st.markdown("**Pesaje en Báscula y Cálculo de Tara por Canastilla:**")
+            cp1, cp2, cp3, cp4, cp5 = st.columns(5)
             with cp1:
-                p_bruto = st.number_input(f"Peso Bruto (Kg) #{i+1}", min_value=0.0, key=f"rf_bruto_{i}")
+                n_canastillas = st.number_input(f"N° Canastillas #{i+1}", min_value=0, step=1, value=1, key=f"rf_ncan_{i}")
             with cp2:
-                tara_c = st.number_input(f"Tara Canastillas/Empaque (Kg) #{i+1}", min_value=0.0, key=f"rf_tara_{i}")
+                tara_unit = st.number_input(f"Tara / Canastilla (Kg) #{i+1}", min_value=0.0, value=2.0, step=0.1, key=f"rf_tunit_{i}")
             with cp3:
-                kg_danado = st.number_input(f"Fruta Dañada/Merma (Kg) #{i+1}", min_value=0.0, key=f"rf_dan_{i}")
+                p_bruto = st.number_input(f"Peso Bruto Total (Kg) #{i+1}", min_value=0.0, step=1.0, key=f"rf_bruto_{i}")
             with cp4:
-                p_kg_acordado = st.number_input(f"Precio Compra $/Kg #{i+1}", min_value=0.0, key=f"rf_pkg_{i}")
+                kg_danado = st.number_input(f"Fruta Dañada/Merma (Kg) #{i+1}", min_value=0.0, step=0.5, key=f"rf_dan_{i}")
+            with cp5:
+                p_kg_acordado = st.number_input(f"Precio Compra $/Kg #{i+1}", min_value=0.0, step=50.0, key=f"rf_pkg_{i}")
 
-            kg_netos = max(0.0, p_bruto - tara_c)
+            # Cálculos automáticos por canastilla
+            tara_calculada = n_canastillas * tara_unit
+            kg_netos = max(0.0, p_bruto - tara_calculada)
             kg_utiles = max(0.0, kg_netos - kg_danado)
             subtot_f = kg_utiles * p_kg_acordado
 
             peso_bruto_acum += p_bruto
-            tara_acum += tara_c
+            tara_acum += tara_calculada
+            canastillas_acum += n_canastillas
             valor_total_fruta += subtot_f
 
-            st.info(f"💡 **Subtotal Fruta #{i+1}:** Kilos Netos: {kg_netos:,.2f} Kg | Kilos Útiles: {kg_utiles:,.2f} Kg | Subtotal: **${subtot_f:,.2f}**")
+            st.info(
+                f"📊 **Resumen Lote #{i+1}:** Canastillas: {n_canastillas} Uds | Tara Total: {tara_calculada:,.2f} Kg | "
+                f"Kilos Netos: {kg_netos:,.2f} Kg | Kilos Útiles: **{kg_utiles:,.2f} Kg** | Subtotal: **${subtot_f:,.2f}**"
+            )
 
             detalles_recepcion.append({
-                "fruta": fruta_r, "p_bruto": p_bruto, "tara": tara_c,
-                "kg_netos": kg_netos, "kg_danado": kg_danado, "kg_utiles": kg_utiles,
-                "precio_kg": p_kg_acordado, "subtotal": subtot_f
+                "fruta": fruta_r, 
+                "num_canastillas": n_canastillas,
+                "tara_unit_canastilla": tara_unit,
+                "p_bruto": p_bruto, 
+                "tara_calculada": tara_calculada,
+                "kg_danado": kg_danado, 
+                "kg_netos": kg_netos, 
+                "kg_utiles": kg_utiles,
+                "precio_kg": p_kg_acordado, 
+                "subtotal": subtot_f
             })
 
         obs_rec = st.text_area("Observaciones de la Recepción", key="rec_obs")
         saldo_pendiente = max(0.0, valor_total_fruta - monto_abonado)
 
-        st.markdown(f"### 💵 **TOTAL RECEPCIÓN: ${valor_total_fruta:,.2f}** | Saldo Pendiente: **${saldo_pendiente:,.2f}**")
+        st.markdown(f"### 💵 **TOTAL RECEPCIÓN: ${valor_total_fruta:,.2f}** | Canastillas Recibidas: **{canastillas_acum} Uds** | Saldo Pendiente: **${saldo_pendiente:,.2f}**")
 
         btn_guardar_rec = st.form_submit_button("📥 Registrar Recepción en Bodega")
 
@@ -418,16 +438,16 @@ with tab2:
                 INSERT INTO ordenes_recepcion 
                 (id_orden_compra_ref, fecha_ingreso, proveedor, conductor_placa, documento_ref, canastillas_totales, canastillas_devueltas, peso_bruto_total, tara_total, peso_neto_total, costo_flete, valor_total, estado_pago, monto_abonado, saldo_pendiente, observaciones)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (id_oc_ref, fecha_actual, prov_rec, conductor_placa, doc_ref, canastillas_tot, canastillas_dev, peso_bruto_acum, tara_acum, peso_neto_total_acum, costo_flete_ingresado, valor_total_fruta, estado_pago, monto_abonado, saldo_pendiente, obs_rec))
+            """, (id_oc_ref, fecha_actual, prov_rec, conductor_placa, doc_ref, canastillas_acum, canastillas_dev, peso_bruto_acum, tara_acum, peso_neto_total_acum, costo_flete_ingresado, valor_total_fruta, estado_pago, monto_abonado, saldo_pendiente, obs_rec))
             
             id_rec_creada = c.lastrowid
 
             for dr in detalles_recepcion:
                 c.execute("""
                     INSERT INTO detalle_frutas_orden 
-                    (id_orden, fruta, kg_danado, kilos_netos, kilos_utiles, precio_kg, subtotal)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (id_rec_creada, dr["fruta"], dr["kg_danado"], dr["kg_netos"], dr["kg_utiles"], dr["precio_kg"], dr["subtotal"]))
+                    (id_orden, fruta, num_canastillas, tara_unit_canastilla, peso_bruto, tara_calculada, kg_danado, kilos_netos, kilos_utiles, precio_kg, subtotal)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (id_rec_creada, dr["fruta"], dr["num_canastillas"], dr["tara_unit_canastilla"], dr["p_bruto"], dr["tara_calculada"], dr["kg_danado"], dr["kg_netos"], dr["kg_utiles"], dr["precio_kg"], dr["subtotal"]))
 
             conn.commit()
             conn.close()
