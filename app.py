@@ -9,25 +9,25 @@ from reportlab.lib import colors
 import io
 
 # ---------------------------------------------------------
-# CONFIGURACIÓN DE LA BASE DE DATOS SQLITE (Nube / Local)
+# CONFIGURACIÓN DE LA BASE DE DATOS
 # ---------------------------------------------------------
 def inicializar_bd():
     conn = sqlite3.connect("bascula_the_oranges.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS pesajes (
+        CREATE TABLE IF NOT EXISTS tiquetes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha_registro TEXT,
+            consecutivo TEXT,
+            fecha TEXT,
             proveedor TEXT,
             factura TEXT,
             fruta TEXT,
             calidad TEXT,
             conductor TEXT,
-            tara_unit REAL,
-            pesaje_num INTEGER,
-            canastillas INTEGER,
-            peso_bruto REAL,
-            tara_total REAL,
+            tara_canastilla REAL,
+            total_canastillas INTEGER,
+            peso_bruto_total REAL,
+            peso_tara_total REAL,
             peso_neto REAL
         )
     ''')
@@ -39,203 +39,216 @@ conn = inicializar_bd()
 # Configuración de página de Streamlit
 st.set_page_config(
     page_title="Tiquete de Báscula - The Oranges",
-    layout="centered",
+    layout="wide",
     page_icon="🍊"
 )
 
-st.title("🍊 Báscula de Recepción - Almacenamiento y Tiquete PDF")
-st.write("Registra los pesajes, guárdalos de forma permanente y genera el tiquete oficial.")
+st.title("🍊 Sistema de Control de Báscula y Recepción de Fruta")
+st.write("Registra el peso bruto por tandas de canastillas, calcula automáticamente el neto y genera el tiquete oficial en PDF.")
+
+# Menú lateral
+menu = st.sidebar.selectbox("Menú Principal", ["⚖️ Registrar Entrada de Fruta", "📊 Historial de Tiquetes"])
 
 # ---------------------------------------------------------
-# DATOS GENERALES DEL INGRESO
+# MÓDULO 1: REGISTRAR ENTRADA DE FRUTA
 # ---------------------------------------------------------
-with st.container():
+if menu == "⚖️ Registrar Entrada de Fruta":
+    
     st.subheader("1. Información del Proveedor y Carga")
+    
+    # Generar un consecutivo temporal para el tiquete
+    if 'consecutivo_actual' not in st.session_state:
+        st.session_state.consecutivo_actual = f"TQ-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
     col1, col2 = st.columns(2)
     with col1:
         proveedor = st.text_input("Nombre del Proveedor / Finca", placeholder="Ej: Finca El Paraíso")
         factura = st.text_input("Número de Factura / Doc. Soporte", placeholder="Ej: DS-1024")
+        tara_canastilla = st.number_input("Tara estándar por canastilla vacía (Kg)", min_value=0.0, value=1.5, step=0.1)
+    
     with col2:
-        fruta = st.selectbox("Fruta que Ingresa", ["MARACUYA", "MANGO", "MORA", "LULO", "GUANABANA", "LIMON", "NARANJA", "PIÑA", "OTRA"])
-        calidad = st.selectbox("Calidad", ["Primera", "Segunda", "Industrial / Pulpa"])
+        # Opciones de fruta
+        opciones_fruta = ["MARACUYA", "MANGO", "MORA", "LULO", "GUANABANA", "LIMON", "NARANJA", "PIÑA", "PULPA DE FRUTA", "OTRA"]
+        
+        fruta_seleccionada = st.selectbox(
+            "Fruta que Ingresa", 
+            opciones_fruta,
+            key="selectbox_fruta"
+        )
+        
+        # Si selecciona OTRA, mostramos el campo de texto interactivo
+        if fruta_seleccionada == "OTRA":
+            fruta_custom = st.text_input("Escribe el nombre de la otra fruta", placeholder="Ej: FEIJOA", key="input_otra_fruta")
+            fruta = fruta_custom.strip().upper() if fruta_custom else "OTRA (Sin especificar)"
+        else:
+            fruta = fruta_seleccionada
 
-    col3, col4 = st.columns(2)
-    with col3:
-        tara_unit = st.number_input("Tara estándar por canastilla vacía (Kg)", min_value=0.0, value=1.5, step=0.1)
-    with col4:
+        calidad = st.selectbox("Calidad", ["Primera", "Segunda", "Industrial / Descarte"])
         conductor = st.text_input("Nombre del Conductor / Entregador", placeholder="Ej: Carlos Mendoza")
 
-st.divider()
+    st.divider()
+    st.subheader("2. Registrar Tanda en la Báscula")
+
+    # Inicializar lista temporal de tandas en session_state si no existe
+    if 'tandas_actuales' not in st.session_state:
+        st.session_state.tandas_actuales = []
+
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        cant_canastillas = st.number_input("Cantidad de canastillas en esta tanda", min_value=1, value=5, step=1, key="cant_canas")
+    with col_t2:
+        peso_bruto_tanda = st.number_input("Peso Bruto marcado en la báscula (Kg)", min_value=0.0, value=100.0, step=0.5, key="peso_bruto")
+
+    if st.button("➕ Guardar y Registrar Tanda", use_container_width=True):
+        st.session_state.tandas_actuales.append({
+            "canastillas": cant_canastillas,
+            "peso_bruto": peso_bruto_tanda
+        })
+        st.success(f"Tanda agregada: {cant_canastillas} canastillas | Bruto: {peso_bruto_tanda:,.2f} Kg")
+
+    # Mostrar tabla de tandas acumuladas
+    if st.session_state.tandas_actuales:
+        st.markdown("#### Tandas Registradas para este Ingreso:")
+        df_tandas = pd.DataFrame(st.session_state.tandas_actuales)
+        df_tandas.columns = ["Cantidad Canastillas", "Peso Bruto (Kg)"]
+        st.dataframe(df_tandas, use_container_width=True)
+
+        total_c = df_tandas["Cantidad Canastillas"].sum()
+        total_b = df_tandas["Peso Bruto (Kg)"].sum()
+        total_tara = total_c * tara_canastilla
+        total_neto = total_b - total_tara
+
+        st.markdown("### Resumen de Pesaje")
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.metric("Total Canastillas", f"{total_c}")
+        with m2:
+            st.metric("Peso Bruto Acumulado", f"{total_b:,.2f} Kg")
+        with m3:
+            st.metric("Total Tara (Canastillas)", f"{total_tara:,.2f} Kg")
+        with m4:
+            st.metric("PESO NETO DE FRUTA", f"{total_neto:,.2f} Kg", delta="¡Listo para liquidar!")
+
+        st.divider()
+
+        # Botón para guardar en la base de datos definitiva
+        if st.button("💾 Finalizar y Guardar Tiquete Oficial", type="primary", use_container_width=True):
+            if not proveedor:
+                st.error("⚠️ Por favor ingresa el nombre del proveedor.")
+            else:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO tiquetes (consecutivo, fecha, proveedor, factura, fruta, calidad, conductor, tara_canastilla, total_canastillas, peso_bruto_total, peso_tara_total, peso_neto)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (st.session_state.consecutivo_actual, str(datetime.now()), proveedor, factura, fruta, calidad, conductor, tara_canastilla, int(total_c), float(total_b), float(total_tara), float(total_neto)))
+                conn.commit()
+                st.success(f"¡Tiquete {st.session_state.consecutivo_actual} guardado con éxito en la base de datos!")
+                
+                # Generador de PDF del Tiquete
+                def generar_pdf_tiquete():
+                    buffer = io.BytesIO()
+                    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+                    elements = []
+                    
+                    styles = getSampleStyleSheet()
+                    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#1B4D3E'), alignment=1, spaceAfter=4)
+                    subtitle_style = ParagraphStyle('SubtitleStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#555555'), alignment=1, spaceAfter=15)
+                    bold_text = ParagraphStyle('BoldText', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold')
+                    regular_text = ParagraphStyle('RegularText', parent=styles['Normal'], fontSize=9)
+
+                    elements.append(Paragraph("THE ORANGES S.A.S.", title_style))
+                    elements.append(Paragraph("Planta de Procesamiento de Fruta — TIQUETE DE BÁSCULA", subtitle_style))
+                    
+                    data_info = [
+                        [Paragraph("No. Tiquete:", bold_text), Paragraph(st.session_state.consecutivo_actual, regular_text),
+                         Paragraph("Fecha:", bold_text), Paragraph(datetime.now().strftime('%Y-%m-%d %H:%M'), regular_text)],
+                        [Paragraph("Proveedor:", bold_text), Paragraph(proveedor, regular_text),
+                         Paragraph("Factura / Soporte:", bold_text), Paragraph(factura or 'N/A', regular_text)],
+                        [Paragraph("Fruta:", bold_text), Paragraph(fruta, regular_text),
+                         Paragraph("Calidad:", bold_text), Paragraph(calidad, regular_text)],
+                        [Paragraph("Conductor:", bold_text), Paragraph(conductor or 'N/A', regular_text),
+                         Paragraph("Tara Canastilla:", bold_text), Paragraph(f"{tara_canastilla} Kg", regular_text)]
+                    ]
+                    
+                    t_info = Table(data_info, colWidths=[90, 180, 90, 180])
+                    t_info.setStyle(TableStyle([
+                        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F9F9F9')),
+                        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#DCDCDC')),
+                        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                        ('PADDING', (0,0), (-1,-1), 5),
+                    ]))
+                    elements.append(t_info)
+                    elements.append(Spacer(1, 15))
+                    
+                    # Tabla resumen de pesos
+                    totales_data = [
+                        ["Concepto", "Valor Medida"],
+                        ["Cantidad Total de Canastillas", f"{int(total_c)} un."],
+                        ["Peso Bruto Total", f"{total_b:,.2f} Kg"],
+                        ["Total Tara Canastillas", f"{total_tara:,.2f} Kg"],
+                        ["PESO NETO DE FRUTA", f"{total_neto:,.2f} Kg"]
+                    ]
+                    t_totales = Table(totales_data, colWidths=[340, 200])
+                    t_totales.setStyle(TableStyle([
+                        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1B4D3E')),
+                        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0,0), (-1,0), 9),
+                        ('BACKGROUND', (0,1), (-1,-2), colors.HexColor('#FCFCFC')),
+                        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#E8F5E9')),
+                        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+                        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E0E0E0')),
+                        ('PADDING', (0,0), (-1,-1), 6),
+                    ]))
+                    elements.append(t_totales)
+                    
+                    elements.append(Spacer(1, 50))
+                    firma_data = [
+                        ["____________________________________", "____________________________________"],
+                        ["Báscula / Recibo The Oranges", "Firma Conductor / Proveedor"]
+                    ]
+                    t_firmas = Table(firma_data, colWidths=[270, 270])
+                    t_firmas.setStyle(TableStyle([
+                        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+                        ('FONTSIZE', (0,0), (-1,-1), 9),
+                        ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#333333')),
+                    ]))
+                    elements.append(t_firmas)
+                    
+                    doc.build(elements)
+                    buffer.seek(0)
+                    return buffer.getvalue()
+
+                pdf_bytes = generar_pdf_tiquete()
+                st.download_button(
+                    label="📥 Descargar Tiquete Oficial en PDF",
+                    data=pdf_bytes,
+                    file_name=f"Tiquete_{st.session_state.consecutivo_actual}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                
+                # Botón para limpiar y empezar nuevo registro
+                if st.button("🔄 Iniciar Nuevo Tiquete"):
+                    st.session_state.tandas_actuales = []
+                    st.session_state.consecutivo_actual = f"TQ-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+                    st.rerun()
+
+    else:
+        st.info("💡 Ingresa las canastillas y el peso bruto de la tanda arriba y haz clic en 'Guardar y Registrar Tanda'.")
 
 # ---------------------------------------------------------
-# ENTRADA DE PESAJES INDIVIDUALES (TANDAS)
+# MÓDULO 2: HISTORIAL DE TIQUETES
 # ---------------------------------------------------------
-st.subheader("2. Registrar Tanda en la Báscula")
-
-with st.form("form_agregar_pesaje", clear_on_submit=True):
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        cant_canastillas = st.number_input("Cantidad de canastillas en esta tanda", min_value=1, step=1, value=5)
-    with col_p2:
-        peso_bruto = st.number_input("Peso Bruto marcado en la báscula (Kg)", min_value=0.1, step=0.5, value=100.0)
-    
-    btn_agregar = st.form_submit_button("➕ Guardar y Registrar Tanda")
-    
-    if btn_agregar:
-        if not proveedor or not factura:
-            st.error("⚠️ Por favor ingresa el nombre del Proveedor y el Número de Factura antes de registrar pesajes.")
+elif menu == "📊 Historial de Tiquetes":
+    st.subheader("Historial de Ingresos de Fruta Registrados")
+    try:
+        df_hist = pd.read_sql("SELECT consecutivo as 'No. Tiquete', fecha as 'Fecha', proveedor as 'Proveedor', fruta as 'Fruta', calidad as 'Calidad', total_canastillas as 'Canastillas', peso_neto as 'Neto (Kg)' FROM tiquetes", conn)
+        if not df_hist.empty:
+            st.dataframe(df_hist, use_container_width=True)
         else:
-            tara_tanda = cant_canastillas * tara_unit
-            neto_tanda = peso_bruto - tara_tanda
-            fecha_ahora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            # Obtener el número de pesaje actual para esta factura
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM pesajes WHERE factura = ?", (factura,))
-            num_actual = cursor.fetchone()[0] + 1
-            
-            # Guardar en la base de datos SQLite
-            cursor.execute('''
-                INSERT INTO pesajes (fecha_registro, proveedor, factura, fruta, calidad, conductor, tara_unit, pesaje_num, canastillas, peso_bruto, tara_total, peso_neto)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (fecha_ahora, proveedor, factura, fruta, calidad, conductor, tara_unit, num_actual, cant_canastillas, peso_bruto, tara_tanda, neto_tanda))
-            conn.commit()
-            
-            st.success(f"✅ ¡Pesaje #{num_actual} guardado exitosamente en la base de datos!")
-
-# Botón para limpiar o iniciar un nuevo lote
-if st.button("🗑️ Limpiar Lote Actual en Pantalla"):
-    st.rerun()
-
-st.divider()
-
-# ---------------------------------------------------------
-# TABLA ACUMULADA Y TOTALES DESDE LA BASE DE DATOS
-# ---------------------------------------------------------
-st.subheader("3. Detalle Acumulado del Lote Actual")
-
-if factura:
-    query_lote = "SELECT pesaje_num as 'Pesaje #', canastillas as 'Canastillas', peso_bruto as 'Peso Bruto (Kg)', tara_total as 'Tara (Kg)', peso_neto as 'Peso Neto (Kg)' FROM pesajes WHERE factura = ?"
-    df_pesajes = pd.read_sql(query_lote, conn, params=(factura,))
-else:
-    df_pesajes = pd.DataFrame()
-
-if not df_pesajes.empty:
-    st.dataframe(df_pesajes, use_container_width=True)
-    
-    total_canastillas = df_pesajes['Canastillas'].sum()
-    total_bruto = df_pesajes['Peso Bruto (Kg)'].sum()
-    total_tara = df_pesajes['Tara (Kg)'].sum()
-    total_neto = df_pesajes['Peso Neto (Kg)'].sum()
-    
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        st.metric("Total Canastillas", f"{total_canastillas:,} und")
-    with col_m2:
-        st.metric("Peso Bruto Acumulado", f"{total_bruto:,.2f} Kg")
-    with col_m3:
-        st.metric("⚖️ PESO NETO TOTAL FRUTA", f"{total_neto:,.2f} Kg")
-        
-    st.markdown("---")
-    
-    # ---------------------------------------------------------
-    # GENERACIÓN DE PDF CON REPORTLAB
-    # ---------------------------------------------------------
-    def generar_pdf_tiquete():
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-        elements = []
-        
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#1B4D3E'), alignment=1, spaceAfter=4)
-        subtitle_style = ParagraphStyle('SubtitleStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#555555'), alignment=1, spaceAfter=15)
-        bold_text = ParagraphStyle('BoldText', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold')
-        regular_text = ParagraphStyle('RegularText', parent=styles['Normal'], fontSize=9)
-
-        elements.append(Paragraph("THE ORANGES", title_style))
-        elements.append(Paragraph("Comercialización y Transformación de Fruta - Tiquete de Báscula", subtitle_style))
-        
-        data_info = [
-            [Paragraph("Proveedor:", bold_text), Paragraph(proveedor or 'No especificado', regular_text),
-             Paragraph("Fecha / Hora:", bold_text), Paragraph(datetime.now().strftime('%Y-%m-%d %H:%M'), regular_text)],
-            [Paragraph("Factura / Doc:", bold_text), Paragraph(factura or 'N/A', regular_text),
-             Paragraph("Fruta / Calidad:", bold_text), Paragraph(f"{fruta} ({calidad})", regular_text)],
-            [Paragraph("Conductor:", bold_text), Paragraph(conductor or 'No especificado', regular_text),
-             Paragraph("Tara Canastilla:", bold_text), Paragraph(f"{tara_unit:.2f} Kg", regular_text)]
-        ]
-        
-        t_info = Table(data_info, colWidths=[90, 180, 90, 180])
-        t_info.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F9F9F9')),
-            ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#DCDCDC')),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('PADDING', (0,0), (-1,-1), 5),
-        ]))
-        elements.append(t_info)
-        elements.append(Spacer(1, 15))
-        
-        table_data = [["Pesaje #", "Canastillas", "Peso Bruto (Kg)", "Tara Total (Kg)", "Peso Neto Fruta (Kg)"]]
-        
-        for index, row in df_pesajes.iterrows():
-            table_data.append([
-                str(row['Pesaje #']),
-                str(row['Canastillas']),
-                f"{row['Peso Bruto (Kg)']:,.2f}",
-                f"{row['Tara (Kg)']:,.2f}",
-                f"{row['Peso Neto (Kg)']:,.2f}"
-            ])
-            
-        table_data.append([
-            "TOTALES",
-            str(total_canastillas),
-            f"{total_bruto:,.2f}",
-            f"{total_tara:,.2f}",
-            f"{total_neto:,.2f}"
-        ])
-        
-        t_pesajes = Table(table_data, colWidths=[80, 100, 110, 110, 140])
-        t_pesajes.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1B4D3E')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,0), 9),
-            ('BOTTOMPADDING', (0,0), (-1,0), 6),
-            ('BACKGROUND', (0,1), (-1,-2), colors.HexColor('#FCFCFC')),
-            ('GRID', (0,0), (-1,-2), 0.5, colors.HexColor('#E0E0E0')),
-            ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#F0F4F1')),
-            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-            ('LINEABOVE', (0,-1), (-1,-1), 1.5, colors.HexColor('#1B4D3E')),
-            ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#1B4D3E')),
-            ('PADDING', (0,0), (-1,-1), 6),
-        ]))
-        elements.append(t_pesajes)
-        
-        elements.append(Spacer(1, 40))
-        firma_data = [
-            ["____________________________________", "____________________________________"],
-            ["Firma Entregador / Proveedor", "Firma Báscula / Bodega"]
-        ]
-        t_firmas = Table(firma_data, colWidths=[250, 250])
-        t_firmas.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('FONTSIZE', (0,0), (-1,-1), 9),
-            ('TEXTCOLOR', (0,0), (-1,-1), colors.HexColor('#333333')),
-        ]))
-        elements.append(t_firmas)
-        
-        doc.build(elements)
-        buffer.seek(0)
-        return buffer.getvalue()
-
-    pdf_bytes = generar_pdf_tiquete()
-
-    st.download_button(
-        label="📥 Generar y Descargar Tiquete Oficial en PDF",
-        data=pdf_bytes,
-        file_name=f"Tiquete_Bascula_{factura}.pdf",
-        mime="application/pdf"
-    )
-else:
-    st.info("💡 Ingresa el número de factura y proveedor arriba, y comienza a registrar pesajes para ver el acumulado guardado.")
+            st.warning("No hay tiquetes registrados todavía.")
+    except Exception as e:
+        st.error(f"Error cargando el historial: {e}")
